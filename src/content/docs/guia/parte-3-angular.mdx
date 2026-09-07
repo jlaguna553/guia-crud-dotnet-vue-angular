@@ -1,21 +1,24 @@
 ---
 title: "Parte 3 (Angular): Construyendo el frontend"
-description: Paso a paso — arranca con datos fijos, conecta al backend, y agrega crear, editar y eliminar, verificando cada resultado en pantalla y en consola.
+description: Paso a paso — cada concepto nuevo primero con un ejemplo aislado, luego aplicado al CRUD real. Incluye Signals, el enfoque moderno de Angular.
 ---
 
 import Resultado from '../../../components/Resultado.astro';
 import { Steps } from '@astrojs/starlight/components';
 
-Igual que con el backend y con Vue: en pasos pequeños, corriendo la app y revisando el
-resultado real después de cada uno — en la pantalla, en la consola del navegador, o en la
-pestaña Network.
+Igual que con el backend y con Vue: pasos pequeños, corriendo la app y revisando el resultado
+real después de cada uno. En esta parte además vas a ver algo distinto: **cada concepto nuevo
+de Angular se presenta primero con un ejemplo de juguete**, completamente separado de Pedidos,
+antes de aplicarlo al CRUD. Es más código para escribir, pero es la única forma de que el
+concepto se quede — copiar el componente final sin haber visto el mecanismo por separado no
+enseña nada.
 
 ## 3.1 Conceptos básicos de Angular
 
 A diferencia de Vue, un componente Angular es una **clase de TypeScript** decorada con
 `@Component`, con su plantilla normalmente en un archivo aparte:
 
-```ts title="ejemplo — no forma parte del proyecto, solo ilustra el concepto"
+```ts title="ejemplo de juguete — no forma parte del proyecto"
 import { Component } from '@angular/core';
 
 @Component({
@@ -142,10 +145,10 @@ export class AppComponent {
 ```
 
 :::note[💡 Concepto: `CommonModule` y `*ngFor`]
-Al usar componentes standalone (sin NgModules), cada componente declara explícitamente qué
+Con componentes standalone (sin NgModules), cada componente declara explícitamente qué
 necesita en su array `imports`. `*ngFor` (y `*ngIf`, más adelante) vienen de `CommonModule` —
-por eso lo importamos aquí, algo que en Vue no tiene equivalente porque `v-for` es parte del
-lenguaje de plantillas desde el principio.
+en Vue no tiene equivalente porque `v-for` es parte del lenguaje de plantillas desde el
+principio.
 :::
 
 <Resultado
@@ -157,7 +160,7 @@ lenguaje de plantillas desde el principio.
 ## 3.5 Reemplaza el array fijo por una llamada real a la API
 
 Con el backend de la [Parte 1](/guia/parte-1-backend/) corriendo, primero habilita
-`HttpClient` en la configuración de la app:
+`HttpClient`:
 
 ```ts title="src/app/app.config.ts"
 import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
@@ -167,6 +170,14 @@ export const appConfig: ApplicationConfig = {
   providers: [provideZoneChangeDetection({ eventCoalescing: true }), provideHttpClient()]
 };
 ```
+
+:::note[💡 Concepto: `HttpClient` devuelve Observables, no Promesas]
+RxJS (la librería detrás de `HttpClient`) modela peticiones asíncronas como **Observables**:
+algo a lo que te "suscribes" y que puede emitir varios valores en el tiempo (útil para
+WebSockets, por ejemplo). Para una petición HTTP normal solo te interesa el primer valor que
+emite, así que `firstValueFrom(observable)` lo convierte en una Promesa común — y así puedes
+seguir escribiendo `async/await`, igual que en la versión Vue.
+:::
 
 Los tipos:
 
@@ -184,8 +195,7 @@ export interface Pedido {
 }
 ```
 
-Un servicio que aísla la llamada HTTP. `HttpClient` devuelve **Observables** (RxJS); usamos
-`firstValueFrom` para poder seguir escribiendo `async/await`, igual que en la versión Vue:
+El servicio:
 
 ```ts title="src/app/services/pedido.service.ts"
 import { Injectable } from '@angular/core';
@@ -205,8 +215,7 @@ export class PedidoService {
 }
 ```
 
-Y en el componente, reemplaza el array fijo por una llamada a ese servicio cuando el
-componente se inicializa:
+Y en el componente, reemplaza el array fijo:
 
 ```ts title="src/app/app.component.ts"
 import { Component, OnInit } from '@angular/core';
@@ -232,34 +241,13 @@ export class AppComponent implements OnInit {
 }
 ```
 
-```html title="src/app/app.component.html"
-<div class="min-h-screen bg-gray-100 py-10 px-4">
-  <div class="max-w-3xl mx-auto">
-    <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Sistema de Pedidos</h1>
-
-    <div class="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-      <div *ngIf="pedidos.length === 0" class="p-6 text-center text-gray-500">
-        No hay pedidos registrados.
-      </div>
-      <table *ngIf="pedidos.length > 0" class="w-full text-left">
-        <thead>
-          <tr class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
-            <th class="py-3 px-4">ID</th>
-            <th class="py-3 px-4">Cliente</th>
-            <th class="py-3 px-4">Total</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200 text-sm">
-          <tr *ngFor="let ped of pedidos">
-            <td class="py-3 px-4 font-mono">#{{ ped.id }}</td>
-            <td class="py-3 px-4">{{ ped.cliente.nombre }}</td>
-            <td class="py-3 px-4">{{ ped.total }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+```html title="src/app/app.component.html (agrega el *ngIf de vacío)"
+<div *ngIf="pedidos.length === 0" class="p-6 text-center text-gray-500">
+  No hay pedidos registrados.
 </div>
+<table *ngIf="pedidos.length > 0" class="w-full text-left">
+  <!-- ... el resto de la tabla, igual que antes ... -->
+</table>
 ```
 
 :::tip[📝 Haz esto ahora — y revisa la consola]
@@ -277,60 +265,120 @@ Pedidos recibidos del backend: []
 ```
 
 Si en cambio ves un error de CORS o de conexión, revisa la [Parte
-4](/guia/parte-4-conectando/) — significa que el backend no está corriendo o no está en el
-puerto esperado.
+4](/guia/parte-4-conectando/).
 
-## 3.6 Crea el primer pedido de verdad
+## 3.6 Cómo hablan dos componentes: `@Input` y `@Output`
 
-Agrega `FormsModule` para poder usar `[(ngModel)]` (el equivalente de `v-model` en Angular),
-y el método `crear` en el servicio:
+Hasta ahora todo vive en un único componente, `AppComponent`. Eso no escala: en la Parte 3 de
+Vue ya separaste el formulario y la tabla en sus propios archivos, y en Angular vas a hacer lo
+mismo. Pero antes de tocar el proyecto real, entendamos el mecanismo con un ejemplo
+completamente aislado.
 
-```ts title="src/app/services/pedido.service.ts (agregar dentro de la clase)"
-crear(pedido: Pedido): Promise<Pedido> {
-  return firstValueFrom(this.http.post<Pedido>(API_URL, pedido));
+Imagina un componente hijo que saluda a alguien, y avisa a su padre cada vez que lo hace:
+
+```ts title="src/app/saludo/saludo.component.ts — EJEMPLO DE JUGUETE, no forma parte del CRUD"
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+
+@Component({
+  selector: 'app-saludo',
+  standalone: true,
+  templateUrl: './saludo.component.html',
+})
+export class SaludoComponent {
+  @Input() nombre = '';
+  @Output() saludado = new EventEmitter<string>();
+
+  saludar() {
+    this.saludado.emit(this.nombre);
+  }
 }
 ```
 
-```ts title="src/app/app.component.ts"
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { PedidoService } from './services/pedido.service';
-import type { Pedido } from './models/pedido';
+```html title="src/app/saludo/saludo.component.html"
+<p>Hola, {{ nombre }}</p>
+<button (click)="saludar()">Saludar</button>
+```
+
+Y lo usas desde el padre así:
+
+```ts title="src/app/app.component.ts (solo para este experimento)"
+import { Component } from '@angular/core';
+import { SaludoComponent } from './saludo/saludo.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [SaludoComponent],
   templateUrl: './app.component.html',
 })
-export class AppComponent implements OnInit {
-  pedidos: Pedido[] = [];
+export class AppComponent {
+  ultimoSaludo = '';
+
+  registrarSaludo(nombre: string) {
+    this.ultimoSaludo = nombre;
+    console.log('El hijo avisó que saludó a:', nombre);
+  }
+}
+```
+
+```html title="src/app/app.component.html (solo para este experimento)"
+<app-saludo nombre="Ana" (saludado)="registrarSaludo($event)"></app-saludo>
+<p>Último saludo recibido en el padre: {{ ultimoSaludo }}</p>
+```
+
+:::tip[📝 Haz esto ahora — pruébalo en un proyecto aparte o temporalmente en el tuyo]
+Crea estos dos archivos, ajusta `AppComponent` temporalmente como arriba, corre la app, y
+presiona "Saludar". Abre la consola.
+:::
+
+```text title="✅ resultado real en la consola"
+El hijo avisó que saludó a: Ana
+```
+
+:::note[💡 Concepto: props hacia abajo, eventos hacia arriba]
+`@Input() nombre` es cómo el **padre le pasa datos al hijo** — en la plantilla del padre,
+`nombre="Ana"` (o `[nombre]="variable"` si es dinámico). `@Output() saludado` es cómo el
+**hijo le avisa algo al padre** sin modificarlo directamente — declara un `EventEmitter`, lo
+`emit()` cuando pasa algo, y el padre lo escucha con `(saludado)="metodo($event)"`. Es
+exactamente el mismo patrón que ya usaste en Vue con `defineProps`/`defineEmits`: datos hacia
+abajo, eventos hacia arriba. El nombre cambia, el diseño no.
+:::
+
+### Aplica el mismo patrón: extrae el formulario
+
+Ahora que viste el mecanismo aislado, vas a crear `PedidoFormComponent` usando exactamente la
+misma idea: el hijo no sabe nada de HTTP ni del backend — solo junta los datos del formulario y
+avisa al padre con `@Output() guardar`.
+
+```ts title="src/app/components/pedido-form/pedido-form.component.ts"
+import { Component, EventEmitter, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import type { Pedido } from '../../models/pedido';
+
+@Component({
+  selector: 'app-pedido-form',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './pedido-form.component.html',
+})
+export class PedidoFormComponent {
+  @Output() guardar = new EventEmitter<Pedido>();
+
   formulario: Pedido = {
     fecha: new Date().toISOString().slice(0, 16),
     total: 0,
     cliente: { nombre: '', email: '' },
   };
 
-  constructor(private pedidoService: PedidoService) {}
-
-  async ngOnInit() {
-    await this.cargarPedidos();
-  }
-
-  async cargarPedidos() {
-    this.pedidos = await this.pedidoService.obtenerTodos();
-  }
-
-  async guardarPedido() {
-    await this.pedidoService.crear({ ...this.formulario });
-    await this.cargarPedidos();
+  submit() {
+    this.guardar.emit({ ...this.formulario });
   }
 }
 ```
 
-```html title="src/app/app.component.html (agrega el <form> antes de la tabla)"
-<form (ngSubmit)="guardarPedido()" class="bg-white shadow-md rounded-lg p-6 mb-6 border border-gray-200">
+```html title="src/app/components/pedido-form/pedido-form.component.html"
+<form (ngSubmit)="submit()" class="bg-white shadow-md rounded-lg p-6 mb-6 border border-gray-200">
   <h2 class="text-xl font-bold text-gray-800 mb-4">Registrar Nuevo Pedido</h2>
   <div class="grid grid-cols-2 gap-4 mb-4">
     <input [(ngModel)]="formulario.cliente.nombre" name="nombre" placeholder="Nombre del cliente" required class="border rounded px-3 py-2" />
@@ -348,20 +396,65 @@ A diferencia de `v-model`, Angular exige un atributo `name` único por cada inpu
 errores más comunes al empezar con formularios en Angular.
 :::
 
-<Resultado
-	titulo="✅ resultado esperado — el formulario, antes de enviarlo"
-	src="/img/angular-pasos/paso-4-formulario.png"
-	alt="Formulario Registrar Nuevo Pedido vacío arriba de la tabla, que sigue mostrando No hay pedidos registrados"
-/>
+Agrega el método `crear` al servicio, e importa/usa `PedidoFormComponent` desde `AppComponent`:
+
+```ts title="src/app/services/pedido.service.ts (agregar dentro de la clase)"
+crear(pedido: Pedido): Promise<Pedido> {
+  return firstValueFrom(this.http.post<Pedido>(API_URL, pedido));
+}
+```
+
+```ts title="src/app/app.component.ts (reemplaza todo el archivo)"
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { PedidoService } from './services/pedido.service';
+import { PedidoFormComponent } from './components/pedido-form/pedido-form.component';
+import type { Pedido } from './models/pedido';
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [CommonModule, PedidoFormComponent],
+  templateUrl: './app.component.html',
+})
+export class AppComponent implements OnInit {
+  pedidos: Pedido[] = [];
+
+  constructor(private pedidoService: PedidoService) {}
+
+  async ngOnInit() {
+    await this.cargarPedidos();
+  }
+
+  async cargarPedidos() {
+    this.pedidos = await this.pedidoService.obtenerTodos();
+  }
+
+  async guardarPedido(pedido: Pedido) {
+    await this.pedidoService.crear(pedido);
+    await this.cargarPedidos();
+  }
+}
+```
+
+```html title="src/app/app.component.html (agrega app-pedido-form arriba de la tabla)"
+<app-pedido-form (guardar)="guardarPedido($event)"></app-pedido-form>
+```
 
 :::tip[📝 Haz esto ahora — llena el formulario y revisa dos lugares]
 <Steps>
 1. Llena el formulario y presiona "Guardar Pedido".
 2. Mira la **tabla**: debería aparecer tu pedido, con un id asignado por el backend.
-3. Mira la pestaña **Network** de las DevTools: busca el `POST` a `/api/pedidos` y confirma que el status fue `201`.
-4. En una terminal, corre `curl http://localhost:5000/api/pedidos` — tu pedido debe aparecer ahí también, prueba de que se guardó de verdad en el backend.
+3. Mira la pestaña **Network**: busca el `POST` a `/api/pedidos` y confirma que el status fue `201`.
+4. En una terminal, corre `curl http://localhost:5000/api/pedidos` — tu pedido debe aparecer ahí también.
 </Steps>
 :::
+
+<Resultado
+	titulo="✅ resultado esperado — el formulario, ahora en su propio componente"
+	src="/img/angular-pasos/paso-4-formulario.png"
+	alt="Formulario Registrar Nuevo Pedido vacío arriba de la tabla, que sigue mostrando No hay pedidos registrados"
+/>
 
 <Resultado
 	titulo="✅ resultado esperado — después de guardar"
@@ -369,7 +462,185 @@ errores más comunes al empezar con formularios en Angular.
 	alt="Tabla mostrando el pedido recién creado con el id 1 asignado por el backend"
 />
 
-## 3.7 Editar y eliminar
+## 3.7 Precargar datos en un hijo: `ngOnChanges`
+
+Falta el modo edición: cuando el usuario presiona "Editar" en una fila, el mismo formulario
+debe precargarse con los datos de ese pedido. El padre va a cambiar el valor de un `@Input` del
+hijo — y el hijo necesita *enterarse* de ese cambio para actualizar su propio estado interno.
+Otra vez, primero el mecanismo aislado:
+
+```ts title="src/app/contador-hijo/contador-hijo.component.ts — EJEMPLO DE JUGUETE"
+import { Component, Input, OnChanges } from '@angular/core';
+
+@Component({
+  selector: 'app-contador-hijo',
+  standalone: true,
+  templateUrl: './contador-hijo.component.html',
+})
+export class ContadorHijoComponent implements OnChanges {
+  @Input() valorPadre = 0;
+
+  ngOnChanges() {
+    console.log('El padre cambió valorPadre a:', this.valorPadre);
+  }
+}
+```
+
+```html title="src/app/contador-hijo/contador-hijo.component.html"
+<p>El hijo recibió: {{ valorPadre }}</p>
+```
+
+```html title="app.component.html (solo para este experimento)"
+<button (click)="valor = valor + 1">Incrementar</button>
+<app-contador-hijo [valorPadre]="valor"></app-contador-hijo>
+```
+
+:::tip[📝 Haz esto ahora]
+Agrega una propiedad `valor = 0` al `AppComponent` de este experimento, corre la app, y
+presiona "Incrementar" dos veces.
+:::
+
+```text title="✅ resultado real en la consola — se ejecuta también al iniciar, y una vez por cada click"
+El padre cambió valorPadre a: 0
+El padre cambió valorPadre a: 1
+El padre cambió valorPadre a: 2
+```
+
+:::note[💡 Concepto: `ngOnChanges` — el "watch" de Angular]
+`ngOnChanges` es un **hook de ciclo de vida**: un método que Angular llama automáticamente en
+momentos específicos de la vida de un componente. Se ejecuta cada vez que cambia el valor de
+cualquier `@Input`, **incluyendo la primera vez que el componente recibe ese valor** — por eso
+ves el log con `0` apenas arranca, sin haber hecho click todavía. Es el equivalente directo del
+`watch(..., { immediate: true })` que usaste en Vue.
+:::
+
+### Aplica el patrón: modo edición en `PedidoFormComponent`
+
+```ts title="src/app/components/pedido-form/pedido-form.component.ts (reemplaza todo el archivo)"
+import { Component, EventEmitter, Input, Output, OnChanges } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import type { Pedido } from '../../models/pedido';
+
+const vacio = (): Pedido => ({
+  fecha: new Date().toISOString().slice(0, 16),
+  total: 0,
+  cliente: { nombre: '', email: '' },
+});
+
+@Component({
+  selector: 'app-pedido-form',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './pedido-form.component.html',
+})
+export class PedidoFormComponent implements OnChanges {
+  @Input() pedidoAEditar: Pedido | null = null;
+  @Output() guardar = new EventEmitter<Pedido>();
+  @Output() cancelar = new EventEmitter<void>();
+
+  formulario: Pedido = vacio();
+
+  ngOnChanges() {
+    this.formulario = this.pedidoAEditar
+      ? { ...this.pedidoAEditar, cliente: { ...this.pedidoAEditar.cliente } }
+      : vacio();
+  }
+
+  submit() {
+    this.guardar.emit({ ...this.formulario });
+  }
+
+  onCancelar() {
+    this.formulario = vacio();
+    this.cancelar.emit();
+  }
+}
+```
+
+```html title="src/app/components/pedido-form/pedido-form.component.html (reemplaza todo el archivo)"
+<form (ngSubmit)="submit()" class="bg-white shadow-md rounded-lg p-6 mb-6 border border-gray-200">
+  <h2 class="text-xl font-bold text-gray-800 mb-4">
+    {{ formulario.id ? '✏️ Editar Pedido' : '➕ Registrar Nuevo Pedido' }}
+  </h2>
+  <div class="grid grid-cols-2 gap-4 mb-4">
+    <input [(ngModel)]="formulario.cliente.nombre" name="nombre" placeholder="Nombre del cliente" required class="border rounded px-3 py-2" />
+    <input [(ngModel)]="formulario.cliente.email" name="email" type="email" placeholder="Email" required class="border rounded px-3 py-2" />
+    <input [(ngModel)]="formulario.fecha" name="fecha" type="datetime-local" required class="border rounded px-3 py-2" />
+    <input [(ngModel)]="formulario.total" name="total" type="number" step="0.01" required class="border rounded px-3 py-2" />
+  </div>
+  <div class="flex gap-2">
+    <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded font-medium">
+      {{ formulario.id ? 'Actualizar Pedido' : 'Guardar Pedido' }}
+    </button>
+    <button *ngIf="formulario.id" type="button" (click)="onCancelar()" class="bg-gray-500 text-white px-4 py-2 rounded font-medium">
+      Cancelar
+    </button>
+  </div>
+</form>
+```
+
+Ahora extrae la tabla a `PedidoTablaComponent`, con el mismo patrón `@Input`/`@Output` que ya
+conoces — sin ejemplo de juguete esta vez, porque es el mismo mecanismo de la sección 3.6:
+
+```ts title="src/app/components/pedido-tabla/pedido-tabla.component.ts"
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import type { Pedido } from '../../models/pedido';
+
+@Component({
+  selector: 'app-pedido-tabla',
+  standalone: true,
+  imports: [CommonModule],
+  templateUrl: './pedido-tabla.component.html',
+})
+export class PedidoTablaComponent {
+  @Input() pedidos: Pedido[] = [];
+  @Output() editar = new EventEmitter<Pedido>();
+  @Output() eliminar = new EventEmitter<number>();
+
+  formatearMoneda(val: number) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
+  }
+  formatearFecha(fechaStr: string) {
+    return new Date(fechaStr).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+  }
+}
+```
+
+```html title="src/app/components/pedido-tabla/pedido-tabla.component.html"
+<div class="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
+  <div *ngIf="pedidos.length === 0" class="p-6 text-center text-gray-500">
+    No hay pedidos registrados.
+  </div>
+  <table *ngIf="pedidos.length > 0" class="w-full text-left">
+    <thead>
+      <tr class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
+        <th class="py-3 px-4">ID</th>
+        <th class="py-3 px-4">Fecha</th>
+        <th class="py-3 px-4">Cliente</th>
+        <th class="py-3 px-4">Total</th>
+        <th class="py-3 px-4 text-center">Acciones</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-200 text-sm">
+      <tr *ngFor="let ped of pedidos">
+        <td class="py-3 px-4 font-mono">#{{ ped.id }}</td>
+        <td class="py-3 px-4">{{ formatearFecha(ped.fecha) }}</td>
+        <td class="py-3 px-4">
+          <div class="font-semibold">{{ ped.cliente.nombre }}</div>
+          <div class="text-xs text-gray-500">{{ ped.cliente.email }}</div>
+        </td>
+        <td class="py-3 px-4 text-emerald-600 font-bold">{{ formatearMoneda(ped.total) }}</td>
+        <td class="py-3 px-4 text-center space-x-2">
+          <button (click)="editar.emit(ped)" class="bg-amber-500 text-white px-3 py-1 rounded text-xs">Editar</button>
+          <button (click)="eliminar.emit(ped.id!)" class="bg-red-600 text-white px-3 py-1 rounded text-xs">Eliminar</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+```
 
 Agrega `actualizar` y `eliminar` al servicio:
 
@@ -382,61 +653,47 @@ eliminar(id: number): Promise<void> {
 }
 ```
 
-Ahora el componente necesita distinguir "modo crear" de "modo editar" según si `formulario.id`
-tiene valor, y un método `editar` que precarga el formulario:
+Y conecta todo en `AppComponent`, que ahora es puro orquestador — no sabe de formularios ni de
+tablas, solo del estado compartido y de qué hacer cuando los hijos avisan algo:
 
 ```ts title="src/app/app.component.ts (reemplaza todo el archivo)"
 import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { PedidoService } from './services/pedido.service';
+import { PedidoFormComponent } from './components/pedido-form/pedido-form.component';
+import { PedidoTablaComponent } from './components/pedido-tabla/pedido-tabla.component';
 import type { Pedido } from './models/pedido';
-
-const vacio = (): Pedido => ({
-  fecha: new Date().toISOString().slice(0, 16),
-  total: 0,
-  cliente: { nombre: '', email: '' },
-});
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [PedidoFormComponent, PedidoTablaComponent],
   templateUrl: './app.component.html',
 })
 export class AppComponent implements OnInit {
   pedidos: Pedido[] = [];
-  formulario: Pedido = vacio();
+  pedidoSeleccionado: Pedido | null = null;
 
   constructor(private pedidoService: PedidoService) {}
 
-  async ngOnInit() {
-    await this.cargarPedidos();
+  ngOnInit() {
+    this.cargarPedidos();
   }
 
   async cargarPedidos() {
     this.pedidos = await this.pedidoService.obtenerTodos();
   }
 
-  async guardarPedido() {
-    if (this.formulario.id) {
-      await this.pedidoService.actualizar(this.formulario.id, this.formulario);
+  async guardarPedido(pedido: Pedido) {
+    if (pedido.id) {
+      await this.pedidoService.actualizar(pedido.id, pedido);
     } else {
-      await this.pedidoService.crear({ ...this.formulario });
+      await this.pedidoService.crear(pedido);
     }
-    this.formulario = vacio();
+    this.pedidoSeleccionado = null;
     await this.cargarPedidos();
   }
 
-  editar(pedido: Pedido) {
-    this.formulario = { ...pedido, cliente: { ...pedido.cliente } };
-  }
-
-  cancelar() {
-    this.formulario = vacio();
-  }
-
-  async eliminar(id: number) {
+  async borrarPedido(id: number) {
     if (confirm(`¿Eliminar el pedido #${id}?`)) {
       await this.pedidoService.eliminar(id);
       await this.cargarPedidos();
@@ -450,52 +707,17 @@ export class AppComponent implements OnInit {
   <div class="max-w-3xl mx-auto">
     <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Sistema de Pedidos</h1>
 
-    <form (ngSubmit)="guardarPedido()" class="bg-white shadow-md rounded-lg p-6 mb-6 border border-gray-200">
-      <h2 class="text-xl font-bold text-gray-800 mb-4">
-        {{ formulario.id ? '✏️ Editar Pedido' : '➕ Registrar Nuevo Pedido' }}
-      </h2>
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <input [(ngModel)]="formulario.cliente.nombre" name="nombre" placeholder="Nombre del cliente" required class="border rounded px-3 py-2" />
-        <input [(ngModel)]="formulario.cliente.email" name="email" type="email" placeholder="Email" required class="border rounded px-3 py-2" />
-        <input [(ngModel)]="formulario.fecha" name="fecha" type="datetime-local" required class="border rounded px-3 py-2" />
-        <input [(ngModel)]="formulario.total" name="total" type="number" step="0.01" required class="border rounded px-3 py-2" />
-      </div>
-      <div class="flex gap-2">
-        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded font-medium">
-          {{ formulario.id ? 'Actualizar Pedido' : 'Guardar Pedido' }}
-        </button>
-        <button *ngIf="formulario.id" type="button" (click)="cancelar()" class="bg-gray-500 text-white px-4 py-2 rounded font-medium">
-          Cancelar
-        </button>
-      </div>
-    </form>
+    <app-pedido-form
+      [pedidoAEditar]="pedidoSeleccionado"
+      (guardar)="guardarPedido($event)"
+      (cancelar)="pedidoSeleccionado = null">
+    </app-pedido-form>
 
-    <div class="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-      <div *ngIf="pedidos.length === 0" class="p-6 text-center text-gray-500">
-        No hay pedidos registrados.
-      </div>
-      <table *ngIf="pedidos.length > 0" class="w-full text-left">
-        <thead>
-          <tr class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
-            <th class="py-3 px-4">ID</th>
-            <th class="py-3 px-4">Cliente</th>
-            <th class="py-3 px-4">Total</th>
-            <th class="py-3 px-4 text-center">Acciones</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-200 text-sm">
-          <tr *ngFor="let ped of pedidos">
-            <td class="py-3 px-4 font-mono">#{{ ped.id }}</td>
-            <td class="py-3 px-4">{{ ped.cliente.nombre }}</td>
-            <td class="py-3 px-4">{{ ped.total }}</td>
-            <td class="py-3 px-4 text-center space-x-2">
-              <button (click)="editar(ped)" class="bg-amber-500 text-white px-3 py-1 rounded text-xs">Editar</button>
-              <button (click)="eliminar(ped.id!)" class="bg-red-600 text-white px-3 py-1 rounded text-xs">Eliminar</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <app-pedido-tabla
+      [pedidos]="pedidos"
+      (editar)="pedidoSeleccionado = $event"
+      (eliminar)="borrarPedido($event)">
+    </app-pedido-tabla>
   </div>
 </div>
 ```
@@ -504,6 +726,9 @@ export class AppComponent implements OnInit {
 <Steps>
 1. Crea un segundo pedido, para tener algo que editar sin perder el primero.
 2. Presiona "Editar" en una fila y confirma que el formulario cambia a modo "✏️ Editar Pedido" con los datos precargados.
+3. Cambia el total y presiona "Actualizar Pedido". Confirma en la tabla que el valor cambió.
+4. Presiona "Eliminar" en un pedido y confirma el diálogo. La fila debe desaparecer.
+5. Revisa la pestaña Network: deberías haber visto, en algún momento, una petición de cada tipo — `GET`, `POST`, `PUT` y `DELETE`.
 </Steps>
 :::
 
@@ -519,68 +744,240 @@ export class AppComponent implements OnInit {
 	alt="Formulario en modo Editar Pedido con los datos de un pedido existente y el botón Cancelar visible"
 />
 
-:::tip[📝 Ejercicio 3.1 — El CRUD completo, de punta a punta]
+## 3.8 Angular moderno: Signals
+
+Todo lo anterior (`@Input`, `@Output`, `ngOnChanges`) es el Angular "clásico", vigente desde
+hace años y el que vas a encontrar en la mayoría de proyectos existentes. Desde Angular 17, el
+framework ofrece un modelo de reactividad nuevo llamado **Signals** — y desde Angular 19 es
+estable y recomendado para proyectos nuevos. Vale la pena conocerlo, así que vamos a probarlo
+igual que todo lo demás: con ejemplos aislados primero.
+
+:::note[💡 Concepto: ¿qué es una signal?]
+Una `signal` es un contenedor de un valor que **sabe quién la está leyendo**, y cuando cambia,
+notifica automáticamente solo a esas partes exactas de la plantilla — sin que Angular tenga que
+revisar todo el árbol de componentes en busca de cambios, como hace con la detección de
+cambios clásica. Si te suena parecido al `ref()` de Vue que usaste en la Parte 3 (Vue), es
+porque es exactamente la misma idea: reactividad explícita y de grano fino, en vez de "vigilar
+propiedades de una clase" por detrás.
+:::
+
+### Signal y computed
+
+```ts title="src/app/contador-signal/contador-signal.component.ts — EJEMPLO DE JUGUETE"
+import { Component, signal, computed } from '@angular/core';
+
+@Component({
+  selector: 'app-contador-signal',
+  standalone: true,
+  templateUrl: './contador-signal.component.html',
+})
+export class ContadorSignalComponent {
+  contador = signal(0);
+  doble = computed(() => this.contador() * 2);
+
+  incrementar() {
+    this.contador.update((valorActual) => valorActual + 1);
+  }
+}
+```
+
+```html title="src/app/contador-signal/contador-signal.component.html"
+<p>Contador: {{ contador() }}</p>
+<p>Doble: {{ doble() }}</p>
+<button (click)="incrementar()">+1</button>
+```
+
+:::tip[📝 Haz esto ahora]
+Créalo, agrégalo temporalmente a tu `AppComponent`, y haz click en "+1" tres veces.
+:::
+
+```text title="✅ resultado esperado en pantalla, tras 3 clicks"
+Contador: 3
+Doble: 6
+```
+
+:::note[💡 Concepto: `signal()` se lee como función, `computed()` se recalcula solo]
+A diferencia de una propiedad normal, para leer el valor de una signal la **llamas como
+función**: `contador()`, no `contador`. Para cambiarla, nunca la reasignas directamente — usas
+`.set(nuevoValor)` o `.update(valorActual => ...)`. Y `computed()` crea una signal derivada que
+Angular recalcula automáticamente solo cuando `contador` cambia, sin que tengas que declarar de
+qué depende — lo detecta solo, porque la función que le pasaste llamó a `contador()` por
+dentro.
+:::
+
+### `input()` y `output()`: la versión signal de `@Input`/`@Output`
+
+```ts title="src/app/saludo-signal/saludo-signal.component.ts — EJEMPLO DE JUGUETE"
+import { Component, input, output } from '@angular/core';
+
+@Component({
+  selector: 'app-saludo-signal',
+  standalone: true,
+  templateUrl: './saludo-signal.component.html',
+})
+export class SaludoSignalComponent {
+  nombre = input('');
+  saludado = output<string>();
+
+  saludar() {
+    this.saludado.emit(this.nombre());
+  }
+}
+```
+
+```html title="src/app/saludo-signal/saludo-signal.component.html"
+<p>Hola, {{ nombre() }}</p>
+<button (click)="saludar()">Saludar</button>
+```
+
+Se usa exactamente igual que `SaludoComponent` de la sección 3.6 —
+`<app-saludo-signal nombre="Carlos" (saludado)="..."></app-saludo-signal>` — el padre no nota
+ninguna diferencia. Lo único que cambió es cómo está escrito el hijo por dentro: funciones en
+vez de decoradores, sin necesidad de `ngOnChanges` porque `nombre()` ya es reactivo por sí
+mismo.
+
+### `@if` / `@for`: el nuevo control de flujo en plantillas
+
+Angular 17 también reemplazó `*ngIf`/`*ngFor` por una sintaxis nueva, sin necesitar
+`CommonModule`:
+
+```ts title="src/app/lista-signal/lista-signal.component.ts — EJEMPLO DE JUGUETE"
+import { Component, signal } from '@angular/core';
+
+@Component({
+  selector: 'app-lista-signal',
+  standalone: true,
+  templateUrl: './lista-signal.component.html',
+})
+export class ListaSignalComponent {
+  items = signal<string[]>([]);
+
+  agregar() {
+    this.items.update((actual) => [...actual, `item ${actual.length + 1}`]);
+  }
+}
+```
+
+```html title="src/app/lista-signal/lista-signal.component.html"
+@if (items().length === 0) {
+  <p>No hay items todavía.</p>
+} @else {
+  <ul>
+    @for (item of items(); track item) {
+      <li>{{ item }}</li>
+    }
+  </ul>
+}
+<button (click)="agregar()">Agregar</button>
+```
+
+:::caution[⚠️ Nota: el signo `@` ahora es sintaxis reservada]
+Desde que existe `@if`/`@for`, escribir un `@` suelto en cualquier otro lugar de una plantilla
+Angular (por ejemplo, en un texto como "contacto@empresa.com") puede confundir al compilador. Si
+necesitas mostrar un `@` literal, escríbelo como `&#64;`.
+:::
+
+:::note[💡 Concepto: `track` en `@for` es obligatorio]
+A diferencia de `*ngFor` (donde `trackBy` era opcional), `@for` te obliga a especificar por qué
+campo identificar cada elemento — aquí, `track item` porque son strings simples; en un array de
+objetos usarías `track item.id`. Es el mismo problema que resuelve `:key` en `v-for` de Vue:
+ayudar a Angular a saber qué elemento del DOM corresponde a cuál dato cuando la lista cambia.
+:::
+
+### Reto: refactoriza `PedidoTablaComponent` a Signals
+
+Con los tres conceptos anteriores verificados, te toca aplicarlos al proyecto real.
+
+:::tip[📝 Ejercicio 3.1 — Convierte la tabla a Signals]
 <Steps>
-1. Cambia el total del pedido que estás editando y presiona "Actualizar Pedido". Confirma en la tabla que el valor cambió.
-2. Presiona "Eliminar" en un pedido y confirma el diálogo. La fila debe desaparecer.
-3. Revisa la pestaña Network: deberías haber visto, en algún momento, una petición de cada tipo — `GET`, `POST`, `PUT` y `DELETE`.
-4. Recarga la página completa (F5). Los pedidos que no eliminaste deben seguir ahí.
+1. Cambia `@Input() pedidos: Pedido[] = []` por `pedidos = input<Pedido[]>([])`.
+2. Cambia `@Output() editar`/`eliminar` por `editar = output<Pedido>()` / `eliminar = output<number>()`.
+3. En la plantilla, reemplaza `*ngIf`/`*ngFor` por `@if`/`@for`, y cada `pedidos` por `pedidos()`.
+4. Agrega una signal derivada `totalGeneral = computed(() => this.pedidos().reduce((suma, ped) => suma + ped.total, 0))` y muéstrala debajo de la tabla.
+5. En `AppComponent`, el binding `[pedidos]="pedidos"` **no cambia** — sea `@Input` o `input()`, el padre lo usa igual. Solo cambia el archivo del hijo.
 </Steps>
 :::
 
-## 3.8 Dale formato final: fechas y moneda legibles
+<details>
+<summary>Ver solución verificada (haz el intento primero)</summary>
 
-Reemplaza la tabla completa para formatear fecha y total con `Intl`, igual que hiciste (o
-harías) en Vue:
+```ts title="src/app/components/pedido-tabla/pedido-tabla.component.ts"
+import { Component, input, output, computed } from '@angular/core';
+import type { Pedido } from '../../models/pedido';
 
-```html title="src/app/app.component.html (reemplaza la tabla)"
-<table *ngIf="pedidos.length > 0" class="w-full text-left">
-  <thead>
-    <tr class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
-      <th class="py-3 px-4">ID</th>
-      <th class="py-3 px-4">Fecha</th>
-      <th class="py-3 px-4">Cliente</th>
-      <th class="py-3 px-4">Total</th>
-      <th class="py-3 px-4 text-center">Acciones</th>
-    </tr>
-  </thead>
-  <tbody class="divide-y divide-gray-200 text-sm">
-    <tr *ngFor="let ped of pedidos">
-      <td class="py-3 px-4 font-mono">#{{ ped.id }}</td>
-      <td class="py-3 px-4">{{ formatearFecha(ped.fecha) }}</td>
-      <td class="py-3 px-4">
-        <div class="font-semibold">{{ ped.cliente.nombre }}</div>
-        <div class="text-xs text-gray-500">{{ ped.cliente.email }}</div>
-      </td>
-      <td class="py-3 px-4 text-emerald-600 font-bold">{{ formatearMoneda(ped.total) }}</td>
-      <td class="py-3 px-4 text-center space-x-2">
-        <button (click)="editar(ped)" class="bg-amber-500 text-white px-3 py-1 rounded text-xs">Editar</button>
-        <button (click)="eliminar(ped.id!)" class="bg-red-600 text-white px-3 py-1 rounded text-xs">Eliminar</button>
-      </td>
-    </tr>
-  </tbody>
-</table>
-```
+@Component({
+  selector: 'app-pedido-tabla',
+  standalone: true,
+  imports: [],
+  templateUrl: './pedido-tabla.component.html',
+})
+export class PedidoTablaComponent {
+  pedidos = input<Pedido[]>([]);
+  editar = output<Pedido>();
+  eliminar = output<number>();
 
-Y agrega los dos métodos a la clase `AppComponent`:
+  totalGeneral = computed(() =>
+    this.pedidos().reduce((suma, ped) => suma + ped.total, 0)
+  );
 
-```ts title="src/app/app.component.ts (agregar dentro de la clase)"
-formatearMoneda(val: number) {
-  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
-}
-formatearFecha(fechaStr: string) {
-  return new Date(fechaStr).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+  formatearMoneda(val: number) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
+  }
+  formatearFecha(fechaStr: string) {
+    return new Date(fechaStr).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+  }
 }
 ```
 
-:::note[💡 A diferencia de Vue: funciones en la clase, no en el `<template>`]
-En Vue podías escribir la expresión `Intl` directamente dentro de `{{ }}`. En Angular, la
-plantilla solo puede llamar métodos que existan en la clase del componente — no evalúa
-expresiones JavaScript arbitrarias con `new` dentro del HTML. Es una pequeña diferencia de
-sintaxis para el mismo resultado.
+```html title="src/app/components/pedido-tabla/pedido-tabla.component.html"
+<div class="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
+  @if (pedidos().length === 0) {
+    <div class="p-6 text-center text-gray-500">No hay pedidos registrados.</div>
+  } @else {
+    <table class="w-full text-left">
+      <thead>
+        <tr class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
+          <th class="py-3 px-4">ID</th>
+          <th class="py-3 px-4">Cliente</th>
+          <th class="py-3 px-4">Total</th>
+          <th class="py-3 px-4 text-center">Acciones</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200 text-sm">
+        @for (ped of pedidos(); track ped.id) {
+          <tr>
+            <td class="py-3 px-4 font-mono">#{{ ped.id }}</td>
+            <td class="py-3 px-4">{{ ped.cliente.nombre }}</td>
+            <td class="py-3 px-4">{{ formatearMoneda(ped.total) }}</td>
+            <td class="py-3 px-4 text-center space-x-2">
+              <button (click)="editar.emit(ped)" class="bg-amber-500 text-white px-3 py-1 rounded text-xs">Editar</button>
+              <button (click)="eliminar.emit(ped.id!)" class="bg-red-600 text-white px-3 py-1 rounded text-xs">Eliminar</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    <div class="p-3 text-right text-sm font-semibold border-t border-gray-200">
+      Total general: {{ formatearMoneda(totalGeneral()) }}
+    </div>
+  }
+</div>
+```
+
+Verificado end-to-end: crear un pedido real por este componente muestra `Total general:
+$150.50` calculado por `computed()`, sin escribir ninguna lógica de recálculo manual.
+</details>
+
+:::tip[📝 Ejercicio 3.2 — Reto opcional: todo el árbol con Signals]
+Convierte también el estado de `AppComponent` (`pedidos`, `pedidoSeleccionado`) a `signal(...)`,
+usando `.set()` en vez de asignaciones directas. El resto del comportamiento — crear, editar,
+eliminar — no debería cambiar en absoluto, solo la forma en que se declara el estado.
 :::
 
-Con formato, moneda y fecha legibles, así se ve la versión final:
+## 3.9 Dale formato final: fechas y moneda legibles
+
+Si seguiste el camino clásico (sin el reto de Signals), la tabla ya incluye el formato de fecha
+y moneda con `Intl` desde la sección 3.7. Así se ve el resultado final:
 
 <Resultado
 	titulo="✅ resultado final — con formato de fecha y moneda"
@@ -596,17 +993,16 @@ Con formato, moneda y fecha legibles, así se ve la versión final:
 
 :::note[🔍 Compara con Vue]
 Si hiciste ambos caminos, nota que el resultado visual es intencionalmente casi idéntico — la
-diferencia real está en el código que ya comparaste en la [Parte
-2](/guia/parte-2-elige-camino/), no en lo que ve el usuario final.
+diferencia real está en el código, no en lo que ve el usuario final.
 :::
 
-:::tip[📝 Ejercicio 3.2 — Extiende el CRUD (reto opcional)]
+:::tip[📝 Ejercicio 3.3 — Extiende el CRUD (reto opcional)]
 - Agrega validación de formato de email con `Validators.email` migrando a Reactive Forms.
 - Muestra un mensaje de error si una llamada HTTP falla (hoy no hay manejo de errores).
 - Agrega un campo de búsqueda que filtre la tabla por nombre de cliente.
 :::
 
-## 3.9 Siguientes pasos
+## 3.10 Siguientes pasos
 
 Sigue a la [Parte 4](/guia/parte-4-conectando/) para entender a fondo la conexión
 frontend-backend, y luego a la [Parte 5](/guia/parte-5-sqlite/) para reemplazar los archivos
