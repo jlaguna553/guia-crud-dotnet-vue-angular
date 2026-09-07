@@ -105,23 +105,10 @@ Con archivos, `PedidoService` tenía que leer *toda* la lista, modificarla en me
 reescribir *todo* el archivo — incluso para cambiar un solo pedido. Con una base de datos ya no
 hace falta: cada operación toca solo la fila que necesita.
 
-Para lograr esto sin romper el controlador, primero se extrajo una interfaz común
-`IPedidoService` a partir del `PedidoService` original (ver Parte 1):
-
-```csharp title="Services/IPedidoService.cs"
-public interface IPedidoService
-{
-    Task<List<Pedido>> ObtenerTodosAsync();
-    Task<Pedido?> ObtenerPorIdAsync(int id);
-    Task<Pedido> CrearAsync(Pedido nuevoPedido);
-    Task<bool> ActualizarAsync(int id, Pedido pedidoActualizado);
-    Task<bool> EliminarAsync(int id);
-}
-```
-
-`PedidoService` (la versión de archivos) ahora implementa esta interfaz sin cambiar su
-comportamiento. Y junto a ella, una segunda implementación completamente distinta por dentro,
-pero con el mismo contrato:
+Y aquí es donde paga la decisión de diseño de la Parte 1: `PedidosController` nunca dependió de
+`PedidoService` directamente, sino de la interfaz `IPedidoService` que ya creaste. Eso significa
+que puedes escribir una segunda implementación completamente distinta por dentro, pero con el
+mismo contrato, sin tocar el controlador ni `PedidoService`:
 
 ```csharp title="Services/PedidoSqliteService.cs"
 using Backend.Api.Data;

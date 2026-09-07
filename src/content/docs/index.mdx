@@ -38,11 +38,14 @@ muchos CRUDs conectados entre sí. Dominar cómo construir uno de punta a punta 
 
 ## Arquitectura del proyecto
 
-El proyecto ya tiene dos piezas construidas, y tú vas a construir o entender una tercera:
+Vas a construir dos piezas, empezando de una carpeta completamente vacía:
 
-- **Backend.Api** — una API REST en .NET que expone `/api/pedidos`. Ya existe: la vas a estudiar en la [Parte 1](/guia/parte-1-backend/).
-- **Frontend.UI** — el cliente en Vue 3 + TypeScript. Ya existe como referencia; si eliges el camino Vue, la [Parte 3](/guia/parte-3-vue/) te enseña a reconstruirlo entendiendo cada pieza.
-- **Frontend.Angular** — el mismo cliente, reescrito en Angular. Lo cubre la [Parte 3 (Angular)](/guia/parte-3-angular/).
+- **Backend.Api** — una API REST en .NET que expone `/api/pedidos`. La construyes desde cero en la [Parte 1](/guia/parte-1-backend/).
+- **Frontend.UI** (Vue) o **Frontend.Angular** — la interfaz que consume esa API. La construyes desde cero, con el framework que elijas, en la [Parte 3](/guia/parte-3-vue/).
+
+Nada de este proyecto existe todavía en tu máquina — cada comando `dotnet new`, `npm create` o
+`ng new` que vas a correr en esta guía crea algo nuevo. Al final de la Parte 1 y la Parte 3
+vas a tener carpetas reales, con código que tú escribiste, corriendo en tu computadora.
 
 ```text title="arquitectura"
 ┌────────────────────┐        HTTP / JSON        ┌──────────────────────┐

@@ -6,15 +6,15 @@ description: Paso a paso — modelos, servicio HTTP con axios, componentes de fo
 import Resultado from '../../../components/Resultado.astro';
 import { Steps } from '@astrojs/starlight/components';
 
-Vas a construir `Frontend.UI` pieza por pieza: tipos, servicio HTTP, componente de formulario,
-componente de tabla, y el componente raíz que los conecta. El proyecto ya existe como
-referencia — úsalo para comparar tu solución, no para copiar y pegar sin entender.
+Vas a crear `Frontend.UI` desde una carpeta vacía, pieza por pieza: tipos, servicio HTTP,
+componente de formulario, componente de tabla, y el componente raíz que los conecta. Al final
+de esta parte vas a tener una interfaz real, corriendo en tu navegador, hablando con el backend
+que construiste en la [Parte 1](/guia/parte-1-backend/).
 
-:::caution[📁 ¿Nuevo proyecto o el existente?]
-Puedes seguir esta parte de dos formas: (a) crear un proyecto Vue nuevo desde cero en otra
-carpeta y construir todo tú mismo siguiendo los pasos, comparando al final con `Frontend.UI`; o
-(b) abrir `Frontend.UI` directamente y leer/modificar cada archivo a medida que avanzas. La
-opción (a) enseña más — recomendamos esa si tienes tiempo.
+:::tip[💪 No copies y pegues sin entender]
+Escribe cada archivo tú mismo, aunque el código ya esté completo abajo. Copiar y pegar te da
+un proyecto que funciona; escribirlo tú mismo te da la habilidad de construir el próximo sin
+esta guía al lado.
 :::
 
 ## 3.1 Conceptos básicos de Vue
@@ -55,8 +55,8 @@ npm install
 npm install axios
 ```
 
-El proyecto de referencia además usa Tailwind CSS para los estilos. Es opcional para el
-aprendizaje — puedes usar CSS plano — pero si quieres el mismo resultado visual:
+Las capturas de esta guía usan Tailwind CSS para los estilos. Es opcional para el aprendizaje —
+puedes usar CSS plano — pero si quieres el mismo resultado visual, instálalo también:
 
 ```bash title="terminal"
 npm install tailwindcss @tailwindcss/vite
