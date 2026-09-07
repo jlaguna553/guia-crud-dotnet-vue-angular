@@ -1,11 +1,12 @@
 ---
 title: "Parte 1: El backend en .NET"
-description: Crea desde cero una API REST en ASP.NET Core, con controladores, modelos y el patrón Strategy para el almacenamiento.
+description: Crea desde cero, paso a paso, una API REST en ASP.NET Core — primero con datos en memoria, luego persistentes.
 ---
 
 En esta parte vas a crear, desde una carpeta vacía, la API REST que el resto de la guía va a
-consumir. Al terminar tendrás un proyecto `Backend.Api` funcionando de verdad — no es teoría,
-cada sección termina con código que corre.
+consumir. Vamos a ir despacio: en cada sección agregas un poco de código, corres la aplicación,
+y revisas el resultado real en la terminal antes de seguir. Nada de pegar todos los archivos de
+una vez — si un paso no funciona, lo vas a notar de inmediato porque el paso anterior sí corría.
 
 ## 1.1 ¿Qué es una API REST?
 
@@ -22,114 +23,62 @@ recursos y **verbos HTTP** para decir qué quieres hacer con ese recurso.
 | `PUT` | Reemplazar/actualizar un recurso existente | `PUT /api/pedidos/3` → actualiza el pedido 3 |
 | `DELETE` | Eliminar un recurso | `DELETE /api/pedidos/3` → borra el pedido 3 |
 
-Los datos van a viajar como **JSON** (JavaScript Object Notation), un formato de texto para
-representar objetos que es fácil de leer tanto para humanos como para programas. Así es como se
-va a ver un pedido una vez que termines esta parte:
-
-```json title="ejemplo — un pedido, en JSON"
-{
-  "id": 1,
-  "fecha": "2026-01-15T10:30:00",
-  "total": 150.50,
-  "cliente": {
-    "nombre": "Ana Martínez",
-    "email": "ana@example.com"
-  }
-}
-```
-
 :::note[💡 Concepto: códigos de estado HTTP]
 Cada respuesta HTTP trae un código numérico que indica qué pasó. Los que vas a usar en esta
-API:
-- **200 OK** — la petición funcionó y trae datos (GET).
-- **201 Created** — se creó un recurso nuevo (POST exitoso).
-- **204 No Content** — funcionó, pero no hay nada que devolver (PUT/DELETE exitosos).
-- **404 Not Found** — pediste un recurso que no existe (ej. un id inválido).
+API: **200 OK** (la petición funcionó y trae datos), **201 Created** (se creó un recurso
+nuevo), **204 No Content** (funcionó, pero no hay nada que devolver) y **404 Not Found**
+(pediste un recurso que no existe).
 :::
 
-## 1.2 Crea el proyecto
+## 1.2 Crea el proyecto y confirma que arranca
 
-Necesitas el [.NET SDK](https://dotnet.microsoft.com/download) instalado (`dotnet --version`
-para confirmarlo). En una carpeta vacía para tu proyecto, ejecuta:
+Necesitas el [.NET SDK](https://dotnet.microsoft.com/download) instalado
+(`dotnet --version` para confirmarlo). En una carpeta vacía para tu proyecto, ejecuta:
 
 ```bash title="terminal"
 dotnet new webapi -n Backend.Api -controllers
 cd Backend.Api
-```
-
-El flag `-controllers` le dice al template que genere **controladores** (el estilo que vamos a
-usar en toda la guía) en vez de Minimal APIs. El comando generó una API de ejemplo
-("WeatherForecast") para que veas que todo corre — pruébala antes de tocar nada:
-
-```bash title="terminal"
 dotnet run
 ```
 
-Deberías ver un mensaje indicando en qué puerto quedó escuchando. Detén el servidor (Ctrl+C)
-cuando confirmes que arrancó — vamos a reemplazar ese ejemplo por nuestra propia API.
+El comando generó una API de ejemplo ("WeatherForecast"). Antes de tocar nada, confirma que
+corre: abre otra terminal y ejecuta:
 
-```bash title="terminal — limpia el ejemplo generado"
+```bash title="terminal (segunda ventana)"
+curl http://localhost:5000/weatherforecast
+```
+
+Deberías recibir un array JSON con datos falsos de clima. Si ves eso, tu entorno está bien
+configurado. Detén el servidor (`Ctrl+C` en la primera terminal) y borra el ejemplo — lo vamos
+a reemplazar por nuestra propia API:
+
+```bash title="terminal"
 rm Controllers/WeatherForecastController.cs WeatherForecast.cs
 ```
 
-Este es el destino al que vas a llegar en esta parte:
+## 1.3 El primer endpoint: datos hardcodeados
 
-```text title="estructura final de Backend.Api"
-Backend.Api/
-├── Program.cs                  # arranque de la app, configuración de servicios
-├── Controllers/
-│   └── PedidosController.cs    # recibe las peticiones HTTP
-├── Models/
-│   └── Pedidos.cs              # las clases Pedido y Cliente
-├── Services/
-│   ├── IPedidoService.cs       # el contrato: qué operaciones existen
-│   ├── PedidoService.cs        # implementación basada en archivos
-│   ├── IPedidoStorageStrategy.cs
-│   ├── JsonPedidoStorageStrategy.cs
-│   └── XmlPedidoStorageStrategy.cs
-└── Data/
-    └── pedidos.json            # donde van a vivir los datos, por defecto
-```
+Vamos a construir de adentro hacia afuera: primero un endpoint que responde con datos fijos
+escritos directamente en el código (sin archivos, sin base de datos), para tener algo que
+*corre y responde* lo antes posible. Vamos a mejorar esto en cada sección siguiente.
 
-## 1.3 Los modelos: Pedido y Cliente
-
-Un modelo es simplemente una clase que describe la **forma** de un dato. Aquí es donde vive el
-"objeto anidado" del que hablábamos en la introducción: un `Pedido` va a tener dentro un
-`Cliente` completo, no solo un nombre suelto.
+Primero, el modelo — la forma de un pedido. Este es el objeto anidado del que hablábamos en la
+introducción: un `Pedido` tiene dentro un `Cliente` completo, no solo un nombre suelto.
 
 ```csharp title="Models/Pedidos.cs"
-using System.Text.Json.Serialization;
-using System.Xml.Serialization;
-
 namespace Backend.Api.Models;
 
 public class Cliente
 {
-    [JsonPropertyName("nombre")]
-    [XmlElement("Nombre")]
     public string Nombre { get; set; } = string.Empty;
-
-    [JsonPropertyName("email")]
-    [XmlElement("Email")]
     public string Email { get; set; } = string.Empty;
 }
 
 public class Pedido
 {
-    [JsonPropertyName("id")]
-    [XmlElement("Id")]
     public int? Id { get; set; }
-
-    [JsonPropertyName("fecha")]
-    [XmlElement("Fecha")]
     public DateTime Fecha { get; set; }
-
-    [JsonPropertyName("total")]
-    [XmlElement("Total")]
     public decimal Total { get; set; } // decimal, no float: precisión para dinero
-
-    [JsonPropertyName("cliente")]
-    [XmlElement("Cliente")]
     public Cliente Cliente { get; set; } = new();
 }
 ```
@@ -138,19 +87,212 @@ public class Pedido
 `float` y `double` guardan números en binario, y muchas cantidades decimales "exactas" para
 nosotros (como 0.1) no tienen una representación binaria exacta. Sumar dinero con `float` puede
 dar resultados como `150.49999999` en vez de `150.50`. `decimal` existe específicamente para
-evitar ese problema en cálculos financieros — úsalo siempre que el número represente dinero.
+evitar ese problema en cálculos financieros.
 :::
 
-:::tip[📝 Ejercicio 1.1 — Crea los modelos]
-Crea la carpeta `Models/` y dentro el archivo `Pedidos.cs` con el código de arriba. Compila para
-confirmar que no hay errores: `dotnet build`.
+Ahora el controlador, con dos pedidos escritos a mano y un único endpoint:
+
+```csharp title="Controllers/PedidosController.cs"
+using Backend.Api.Models;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Backend.Api.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class PedidosController : ControllerBase
+{
+    private static readonly List<Pedido> _pedidos = new()
+    {
+        new Pedido {
+            Id = 1, Fecha = new DateTime(2026, 1, 15, 10, 30, 0), Total = 150.50m,
+            Cliente = new Cliente { Nombre = "Ana Martinez", Email = "ana@example.com" }
+        },
+        new Pedido {
+            Id = 2, Fecha = new DateTime(2026, 1, 16, 9, 0, 0), Total = 899.99m,
+            Cliente = new Cliente { Nombre = "Carlos Ruiz", Email = "carlos@example.com" }
+        }
+    };
+
+    [HttpGet]
+    public IActionResult Get() => Ok(_pedidos);
+}
+```
+
+Y `Program.cs` mínimo para que todo esto quede conectado:
+
+```csharp title="Program.cs"
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddControllers();
+
+var app = builder.Build();
+app.MapControllers();
+app.Run("http://0.0.0.0:5000");
+```
+
+:::tip[📝 Haz esto ahora]
+Crea las carpetas `Models/` y `Controllers/` con esos dos archivos, y reemplaza el contenido de
+`Program.cs`. Guarda todo y corre `dotnet run`.
 :::
 
-## 1.4 El patrón Strategy: una interfaz para el almacenamiento
+Con la app corriendo, en la otra terminal:
 
-Antes de decidir *dónde* vamos a guardar los pedidos (¿un archivo? ¿una base de datos?),
-definimos *qué* operaciones necesita cualquier forma de guardarlos: leer todos, y guardar
-todos. Esto es una interfaz — un contrato que cualquier implementación futura debe cumplir.
+```bash title="terminal"
+curl http://localhost:5000/api/pedidos
+```
+
+```json title="✅ resultado real — deberías ver exactamente esto"
+[{"id":1,"fecha":"2026-01-15T10:30:00","total":150.5,"cliente":{"nombre":"Ana Martinez","email":"ana@example.com"}},{"id":2,"fecha":"2026-01-16T09:00:00","total":899.99,"cliente":{"nombre":"Carlos Ruiz","email":"carlos@example.com"}}]
+```
+
+Si ves ese array con tus dos pedidos, vas por buen camino. Si en cambio ves una página de
+error, revisa el mensaje en la terminal donde corre `dotnet run` — casi siempre es un error de
+compilación que te dice exactamente en qué línea está el problema.
+
+## 1.4 Un pedido a la vez: `GET /api/pedidos/{id}`
+
+Agrega este método dentro de la misma clase `PedidosController`, debajo de `Get()`:
+
+```csharp title="Controllers/PedidosController.cs (agregar)"
+[HttpGet("{id}")]
+public IActionResult GetPorId(int id)
+{
+    var pedido = _pedidos.FirstOrDefault(p => p.Id == id);
+    if (pedido == null) return NotFound();
+    return Ok(pedido);
+}
+```
+
+Guarda, deja que `dotnet run` recompile solo (o reinícialo), y prueba dos casos: uno que existe
+y uno que no.
+
+```bash title="terminal"
+curl -i http://localhost:5000/api/pedidos/2
+```
+
+```http title="✅ resultado real — el pedido 2 existe"
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+
+{"id":2,"fecha":"2026-01-16T09:00:00","total":899.99,"cliente":{"nombre":"Carlos Ruiz","email":"carlos@example.com"}}
+```
+
+```bash title="terminal"
+curl -i http://localhost:5000/api/pedidos/99
+```
+
+```http title="✅ resultado real — el pedido 99 no existe"
+HTTP/1.1 404 Not Found
+Content-Type: application/problem+json; charset=utf-8
+
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"Not Found","status":404, ...}
+```
+
+:::note[💡 Concepto: el 404 "gratis" de ASP.NET Core]
+No escribiste ningún código para generar ese JSON de error — `NotFound()` le pide a ASP.NET
+Core que responda con un 404, y el framework arma automáticamente ese cuerpo estándar
+("ProblemDetails", definido en el RFC 9110). Es una de las ventajas de usar un framework maduro:
+los casos comunes ya vienen resueltos de forma consistente.
+:::
+
+## 1.5 Crear pedidos: `POST /api/pedidos`
+
+Agrega este método:
+
+```csharp title="Controllers/PedidosController.cs (agregar)"
+[HttpPost]
+public IActionResult Post([FromBody] Pedido pedido)
+{
+    pedido.Id = _pedidos.Any() ? _pedidos.Max(p => p.Id) + 1 : 1;
+    if (pedido.Fecha == default) pedido.Fecha = DateTime.Now;
+    _pedidos.Add(pedido);
+    return CreatedAtAction(nameof(GetPorId), new { id = pedido.Id }, pedido);
+}
+```
+
+```bash title="terminal"
+curl -X POST http://localhost:5000/api/pedidos \
+  -H "Content-Type: application/json" \
+  -d '{"fecha":"2026-01-17T12:00:00","total":45.00,"cliente":{"nombre":"Lucia Fernandez","email":"lucia@example.com"}}'
+```
+
+```json title="✅ resultado real"
+{"id":3,"fecha":"2026-01-17T12:00:00","total":45.00,"cliente":{"nombre":"Lucia Fernandez","email":"lucia@example.com"}}
+```
+
+Fíjate que tú no enviaste `id` — el servidor lo calculó (`_pedidos.Max(p => p.Id) + 1`). Vuelve
+a pedir la lista completa para confirmar que ahora hay tres:
+
+```bash title="terminal"
+curl http://localhost:5000/api/pedidos
+```
+
+Deberías contar 3 elementos en el array. Ahora, el detalle importante:
+
+:::caution[⚠️ Prueba esto — reinicia el servidor]
+Detén `dotnet run` con `Ctrl+C` y vuelve a ejecutarlo. Pide de nuevo `curl
+http://localhost:5000/api/pedidos`. **Vas a volver a ver solo 2 pedidos** — el que creaste
+desapareció. `_pedidos` es una lista en memoria: vive mientras el proceso está corriendo, y se
+reinicia desde cero cada vez que arrancas la app. Esto es exactamente el problema que resolvemos
+en la sección 1.7.
+:::
+
+## 1.6 Editar y eliminar: `PUT` y `DELETE`
+
+Agrega estos dos métodos para completar el CRUD en memoria:
+
+```csharp title="Controllers/PedidosController.cs (agregar)"
+[HttpPut("{id}")]
+public IActionResult Put(int id, [FromBody] Pedido pedido)
+{
+    var index = _pedidos.FindIndex(p => p.Id == id);
+    if (index == -1) return NotFound();
+    pedido.Id = id;
+    _pedidos[index] = pedido;
+    return NoContent();
+}
+
+[HttpDelete("{id}")]
+public IActionResult Delete(int id)
+{
+    var pedido = _pedidos.FirstOrDefault(p => p.Id == id);
+    if (pedido == null) return NotFound();
+    _pedidos.Remove(pedido);
+    return NoContent();
+}
+```
+
+```bash title="terminal"
+curl -i -X PUT http://localhost:5000/api/pedidos/1 \
+  -H "Content-Type: application/json" \
+  -d '{"fecha":"2026-01-15T10:30:00","total":200.00,"cliente":{"nombre":"Ana Martinez","email":"ana@example.com"}}'
+```
+
+```http title="✅ resultado real"
+HTTP/1.1 204 No Content
+```
+
+```bash title="terminal"
+curl -i -X DELETE http://localhost:5000/api/pedidos/2
+```
+
+```http title="✅ resultado real"
+HTTP/1.1 204 No Content
+```
+
+:::tip[📝 Ejercicio 1.1 — Confirma el estado final]
+Pide `GET /api/pedidos` una vez más. Deberías ver solo el pedido con id 1, con el total ya
+actualizado a 200. Si tienes dudas de qué ids quedan vivos en cualquier momento, siempre puedes
+volver a pedir la lista completa — es tu fuente de verdad.
+:::
+
+## 1.7 Datos que sobreviven un reinicio: el patrón Strategy
+
+Ya viste el problema: una lista en memoria se borra cada vez que reinicias la app. La solución
+es guardar los pedidos en algún lado persistente — para esta guía, un archivo. Pero en vez de
+escribir la lectura/escritura de archivos directamente en el controlador, la separamos detrás
+de una interfaz, así el día de mañana puedes cambiar *dónde* se guarda sin tocar el resto del
+código.
 
 ```csharp title="Services/IPedidoStorageStrategy.cs"
 using Backend.Api.Models;
@@ -163,8 +305,6 @@ public interface IPedidoStorageStrategy
     Task GuardarPedidosAsync(List<Pedido> pedidos);
 }
 ```
-
-Ahora una primera implementación, que guarda todo en un archivo JSON:
 
 ```csharp title="Services/JsonPedidoStorageStrategy.cs"
 using System.Text.Json;
@@ -192,22 +332,9 @@ public class JsonPedidoStorageStrategy : IPedidoStorageStrategy
 }
 ```
 
-Esto es el **patrón Strategy**: encapsular un algoritmo intercambiable (aquí, "cómo persisto
-una lista de pedidos") detrás de una interfaz común, para poder cambiarlo sin tocar el código
-que lo usa. Guarda bien esta idea — es exactamente el mecanismo que te va a permitir enchufar
-SQLite más adelante, en la [Parte 5](/guia/parte-5-sqlite/), sin romper nada.
-
-:::tip[📝 Ejercicio 1.2 — Crea la estrategia de almacenamiento]
-1. Crea la carpeta `Services/` con `IPedidoStorageStrategy.cs` y `JsonPedidoStorageStrategy.cs`.
-2. Crea la carpeta `Data/` (vacía por ahora — se llenará sola cuando guardes el primer pedido).
-3. Reto opcional: escribe también `XmlPedidoStorageStrategy.cs`, con el mismo contrato pero serializando a `Data/pedidos.xml` usando `System.Xml.Serialization.XmlSerializer`. Vas a necesitarlo si más adelante quieres comparar formatos de almacenamiento.
-:::
-
-## 1.5 El servicio: la lógica de negocio del CRUD
-
-`IPedidoStorageStrategy` solo sabe leer y escribir *toda* la lista. El servicio es quien
-traduce eso en operaciones puntuales: obtener uno por id, crear (asignando el siguiente id
-disponible), actualizar, eliminar. Primero el contrato:
+Ahora movemos la lógica que antes vivía suelta en el controlador (calcular el siguiente id,
+buscar por id, etc.) a una clase de servicio, que usa la estrategia de almacenamiento en vez de
+la lista estática:
 
 ```csharp title="Services/IPedidoService.cs"
 using Backend.Api.Models;
@@ -223,8 +350,6 @@ public interface IPedidoService
     Task<bool> EliminarAsync(int id);
 }
 ```
-
-Y la implementación, que por dentro usa la estrategia de almacenamiento que le inyectes:
 
 ```csharp title="Services/PedidoService.cs"
 using Backend.Api.Models;
@@ -252,9 +377,7 @@ public class PedidoService : IPedidoService
     {
         var pedidos = await _storage.LeerPedidosAsync();
         nuevoPedido.Id = pedidos.Any() ? pedidos.Max(p => p.Id) + 1 : 1;
-
         if (nuevoPedido.Fecha == default) nuevoPedido.Fecha = DateTime.Now;
-
         pedidos.Add(nuevoPedido);
         await _storage.GuardarPedidosAsync(pedidos);
         return nuevoPedido;
@@ -265,7 +388,6 @@ public class PedidoService : IPedidoService
         var pedidos = await _storage.LeerPedidosAsync();
         var index = pedidos.FindIndex(p => p.Id == id);
         if (index == -1) return false;
-
         pedidoActualizado.Id = id;
         pedidos[index] = pedidoActualizado;
         await _storage.GuardarPedidosAsync(pedidos);
@@ -277,7 +399,6 @@ public class PedidoService : IPedidoService
         var pedidos = await _storage.LeerPedidosAsync();
         var pedido = pedidos.FirstOrDefault(p => p.Id == id);
         if (pedido == null) return false;
-
         pedidos.Remove(pedido);
         await _storage.GuardarPedidosAsync(pedidos);
         return true;
@@ -285,19 +406,10 @@ public class PedidoService : IPedidoService
 }
 ```
 
-:::tip[📝 Ejercicio 1.3 — Crea el servicio]
-Agrega `IPedidoService.cs` y `PedidoService.cs` a `Services/`. Fíjate que `PedidoService`
-depende de `IPedidoStorageStrategy` — la interfaz de la sección anterior, no de
-`JsonPedidoStorageStrategy` directamente. Todavía no va a compilar solo (falta conectarlo,
-sección 1.7) — es normal.
-:::
+Reescribe el controlador para que dependa de `IPedidoService` en vez de tocar la lista
+directamente — nota que la *forma* de cada endpoint no cambia, solo de dónde saca los datos:
 
-## 1.6 El controlador: la puerta de entrada HTTP
-
-El controlador traduce cada verbo/URL en una llamada al servicio. Fíjate que no sabe nada de
-archivos, JSON, ni bases de datos — solo conoce `IPedidoService`, una interfaz.
-
-```csharp title="Controllers/PedidosController.cs"
+```csharp title="Controllers/PedidosController.cs (reemplaza todo el archivo)"
 using Backend.Api.Models;
 using Backend.Api.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -316,11 +428,7 @@ public class PedidosController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Get()
-    {
-        var pedidos = await _pedidoService.ObtenerTodosAsync();
-        return Ok(pedidos);
-    }
+    public async Task<IActionResult> Get() => Ok(await _pedidoService.ObtenerTodosAsync());
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetPorId(int id)
@@ -355,38 +463,16 @@ public class PedidosController : ControllerBase
 }
 ```
 
-:::note[💡 Concepto: inyección de dependencias]
-Fíjate que `PedidosController` recibe un `IPedidoService` por su constructor — no lo crea él
-mismo con `new PedidoService()`. Esto se llama **inyección de dependencias**: en vez de que
-cada clase construya lo que necesita, se lo "inyecta" un contenedor central que vas a configurar
-en la próxima sección. La ventaja: el controlador depende de una *interfaz* (un contrato), no de
-una implementación concreta. Vas a poder cambiar qué implementación se usa sin tocar el
-controlador — exactamente lo que vas a hacer en la [Parte 5](/guia/parte-5-sqlite/) para pasar
-de archivos a SQLite.
-:::
+Y por último, conecta las piezas en `Program.cs` — aquí es donde se decide *qué* implementación
+usa cada interfaz:
 
-:::tip[📝 Ejercicio 1.4 — Crea el controlador]
-Crea la carpeta `Controllers/` con `PedidosController.cs`. Sigue sin compilar — falta el último
-paso.
-:::
-
-## 1.7 Conecta todo en Program.cs
-
-`dotnet new webapi` generó un `Program.cs` con código de ejemplo. Reemplaza su contenido
-completo por este:
-
-```csharp title="Program.cs"
+```csharp title="Program.cs (reemplaza todo el archivo)"
 using Backend.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-
-// REGISTRO DE ESTRATEGIA (Intercambiable entre JSON y XML)
 builder.Services.AddScoped<IPedidoStorageStrategy, JsonPedidoStorageStrategy>();
-// builder.Services.AddScoped<IPedidoStorageStrategy, XmlPedidoStorageStrategy>();
-
 builder.Services.AddScoped<IPedidoService, PedidoService>();
 
 builder.Services.AddCors(options =>
@@ -398,69 +484,97 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
-
 app.UseCors("AllowVue");
 app.MapControllers();
-
 app.Run("http://0.0.0.0:5000");
 ```
 
-Este es el corazón del patrón Strategy en acción: **una sola línea decide si guardas en JSON o
-en XML**, y ninguna otra clase del proyecto necesita cambiar para que eso funcione.
-
-:::tip[📝 Ejercicio 1.5 — Conecta el proyecto]
-Reemplaza `Program.cs` con el código de arriba y compila: `dotnet build`. Si te quedó algún
-`using` de más de la plantilla original, el compilador te lo va a señalar — bórralo.
+:::note[💡 Concepto: inyección de dependencias]
+`PedidosController` recibe un `IPedidoService` por su constructor — no lo crea con `new
+PedidoService()`. A eso lo llamamos **inyección de dependencias**: en vez de que cada clase
+construya lo que necesita, se lo "inyecta" un contenedor central (las líneas `AddScoped<...>`
+de `Program.cs`). La ventaja: el controlador depende de una *interfaz*, no de una
+implementación concreta, así que puedes cambiar qué implementación se usa sin tocar el
+controlador — que es exactamente lo que vas a hacer en la [Parte 5](/guia/parte-5-sqlite/) para
+pasar de archivos a SQLite.
 :::
 
-## 1.8 Levanta la API y pruébala
+:::tip[📝 Haz esto ahora]
+Crea las carpetas `Services/` y `Data/` (esta última vacía por ahora), agrega los cuatro
+archivos nuevos, reemplaza `PedidosController.cs` y `Program.cs` completos, y borra cualquier
+`using` que el compilador marque como no usado. Corre `dotnet run`.
+:::
+
+Repite la prueba de la sección 1.5, pero ahora fíjate en el resultado:
 
 ```bash title="terminal"
-dotnet run
+curl http://localhost:5000/api/pedidos
 ```
 
-Deberías ver un mensaje indicando que la app escucha en `http://0.0.0.0:5000`. Déjala corriendo
-y, en otra terminal, prueba los distintos verbos con `curl`:
+```json title="✅ resultado real — arranca vacío, ya no hay datos hardcodeados"
+[]
+```
 
 ```bash title="terminal"
-# Listar (al principio, un array vacío: [])
-curl http://localhost:5000/api/pedidos
-
-# Crear un pedido
 curl -X POST http://localhost:5000/api/pedidos \
   -H "Content-Type: application/json" \
   -d '{"fecha":"2026-01-15T10:30:00","total":150.50,"cliente":{"nombre":"Ana Martinez","email":"ana@example.com"}}'
 ```
 
-```json title="Resultado esperado en la terminal"
-{"id":1,"fecha":"2026-01-15T10:30:00","total":150.50,"cliente":{"nombre":"Ana Martinez","email":"ana@example.com"}}
+Ahora abre el archivo que se acaba de crear:
+
+```bash title="terminal"
+cat Data/pedidos.json
 ```
 
-Fíjate que tú no enviaste `id` — la API lo asignó sola (mira `CrearAsync` en `PedidoService`:
-calcula el siguiente id disponible). Este es un principio importante de REST: el servidor es
-quien decide la identidad de los recursos que crea. Y si abres `Data/pedidos.json`, ahí está tu
-pedido guardado — el archivo lo creó `JsonPedidoStorageStrategy` la primera vez que guardaste algo.
+```json title="✅ resultado real — tu pedido, guardado en disco"
+[
+  {
+    "Id": 1,
+    "Fecha": "2026-01-15T10:30:00",
+    "Total": 150.50,
+    "Cliente": {
+      "Nombre": "Ana Martinez",
+      "Email": "ana@example.com"
+    }
+  }
+]
+```
 
-:::tip[📝 Ejercicio 1.6 — Prueba el CRUD completo por curl]
-Con la API corriendo, ejecuta en orden (reemplaza `<ID>` por el id que te devolvió el POST):
-1. `GET /api/pedidos` — confirma que tu pedido aparece en la lista.
-2. `PUT /api/pedidos/<ID>` con un body completo cambiando el `total`.
-3. `GET /api/pedidos/<ID>` — confirma que el total cambió.
-4. `DELETE /api/pedidos/<ID>` y vuelve a hacer `GET` — confirma que ya no está.
+:::note[🔍 Detalle curioso: mayúsculas distintas]
+¿Notaste que el JSON de la API usa `"id"` en minúscula pero el archivo en disco usa `"Id"` con
+mayúscula? La API usa una convención llamada camelCase por configuración automática de
+ASP.NET Core; el archivo lo escribimos nosotros mismos en `JsonPedidoStorageStrategy` con
+`JsonSerializer.Serialize` sin esa configuración, así que usa el nombre exacto de la propiedad
+de C#. No es un error — son dos serializaciones independientes, cada una con sus propias reglas.
 :::
 
-:::tip[📝 Ejercicio 1.7 — Explícalo con tus propias palabras]
-Sin mirar esta guía, escribe en un comentario o en un papel qué hace cada uno de los 5 métodos
-de `PedidoService`. Luego compara con lo que escribiste tú mismo en la sección 1.5. Forzarte a
-explicar tu propio código es una de las mejores formas de comprobar si realmente lo entendiste.
+:::tip[📝 Ejercicio 1.2 — Prueba la persistencia de verdad]
+Reinicia el servidor (`Ctrl+C` y `dotnet run` de nuevo) y pide `GET /api/pedidos`. Esta vez tu
+pedido **debe seguir ahí** — a diferencia de la sección 1.5, ahora sobrevive al reinicio porque
+vive en un archivo, no en memoria.
 :::
 
-## 1.9 CORS: por qué el frontend va a poder llamar a esta API
+:::tip[📝 Ejercicio 1.3 — El CRUD completo, ahora persistente]
+Repite el ciclo completo GET → POST → PUT → DELETE de las secciones 1.3 a 1.6, confirmando cada
+resultado con `curl`. Todo debería comportarse igual que antes — es la ventaja de haber
+diseñado el controlador contra una interfaz: cambiar el almacenamiento por debajo no cambió el
+comportamiento HTTP que ya probaste.
+:::
+
+:::tip[📝 Ejercicio 1.4 — Reto opcional: una segunda estrategia]
+Escribe `XmlPedidoStorageStrategy.cs` con el mismo contrato de `IPedidoStorageStrategy`, pero
+serializando a `Data/pedidos.xml` con `System.Xml.Serialization.XmlSerializer`. Luego cambia una
+sola línea en `Program.cs` (`AddScoped<IPedidoStorageStrategy, XmlPedidoStorageStrategy>`) y
+confirma que el CRUD sigue funcionando exactamente igual, ahora guardando XML en vez de JSON.
+:::
+
+## 1.8 CORS: por qué el frontend va a poder llamar a esta API
 
 Un detalle que vas a necesitar en la Parte 3: por defecto, los navegadores bloquean que una
 página en `http://localhost:5173` (Vue) o `http://localhost:4200` (Angular) haga peticiones a
 `http://localhost:5000` (otro "origen"), por razones de seguridad. Esto se llama política de
-**CORS** (Cross-Origin Resource Sharing). Ya la habilitaste en la sección 1.7:
+**CORS** (Cross-Origin Resource Sharing). Ya la habilitaste en la sección 1.7 — es este bloque:
 
 ```csharp title="Program.cs (repaso)"
 builder.Services.AddCors(options =>
@@ -480,5 +594,5 @@ los dominios exactos de tu frontend (por ejemplo, `policy.WithOrigins("https://m
 para que ningún sitio arbitrario pueda leer tu API desde el navegador de un usuario.
 :::
 
-Con la API funcionando, sigue a la [Parte 2](/guia/parte-2-elige-camino/) para elegir con qué
-framework vas a construir la interfaz que la consume.
+Con la API funcionando y persistiendo datos, sigue a la [Parte 2](/guia/parte-2-elige-camino/)
+para elegir con qué framework vas a construir la interfaz que la consume.
