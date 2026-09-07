@@ -1,0 +1,42 @@
+/* Paleta índigo, a tono con los botones primarios de las apps Vue/Angular del curso */
+:root {
+	--sl-color-accent-low: #e2e1fb;
+	--sl-color-accent: #4f46e5;
+	--sl-color-accent-high: #312e81;
+	--sl-color-white: #ffffff;
+	--sl-color-gray-1: #f7f8fa;
+	--sl-color-gray-2: #eceef2;
+	--sl-color-gray-3: #c4c9d4;
+	--sl-color-gray-4: #6b7280;
+	--sl-color-gray-5: #383f4a;
+	--sl-color-gray-6: #23262d;
+	--sl-color-black: #14161f;
+	--sl-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #e2e1fb;
+	--sl-color-accent: #4f46e5;
+	--sl-color-accent-high: #4338ca;
+	--sl-color-white: #14161f;
+	--sl-color-gray-1: #23262d;
+	--sl-color-gray-2: #383f4a;
+	--sl-color-gray-3: #6b7280;
+	--sl-color-gray-4: #a1a8b5;
+	--sl-color-gray-5: #eceef2;
+	--sl-color-gray-6: #f7f8fa;
+	--sl-color-gray-7: #fbfbfc;
+	--sl-color-black: #ffffff;
+}
+
+.sl-badge.success {
+	background-color: rgba(66, 184, 131, 0.16);
+	color: #2f9e6d;
+	border-color: transparent;
+}
+
+.sl-badge.danger {
+	background-color: rgba(221, 0, 49, 0.14);
+	color: #dd0031;
+	border-color: transparent;
+}

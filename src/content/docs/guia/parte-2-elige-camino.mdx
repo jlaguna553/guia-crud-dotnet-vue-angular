@@ -1,0 +1,57 @@
+---
+title: "Parte 2: Elige tu camino"
+description: Comparación entre Vue y Angular antes de elegir con cuál construir el frontend del CRUD.
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Ya entiendes la API. Ahora toca construir la interfaz que la consume. Puedes elegir **Vue** o
+**Angular** — el resultado final se ve y se comporta igual; lo que cambia es el framework y sus
+ideas. No necesitas hacer los dos: elige el que más te interese aprender ahora, siempre puedes
+volver por el otro camino después.
+
+<CardGrid>
+	<LinkCard
+		title="Camino Vue"
+		description="Componentes de un solo archivo, reactividad simple con ref, plantillas con v-model. Más directo para empezar."
+		href="/guia/parte-3-vue/"
+	/>
+	<LinkCard
+		title="Camino Angular"
+		description="Componentes con clases y decoradores, TypeScript estricto de fábrica, arquitectura más formal."
+		href="/guia/parte-3-angular/"
+	/>
+</CardGrid>
+
+## 2.1 ¿En qué se parecen?
+
+Ambos son frameworks de componentes para construir interfaces reactivas: divides la UI en
+piezas pequeñas y reutilizables (un formulario, una tabla), cada una con su propio estado y su
+propia plantilla, y el framework se encarga de actualizar el DOM cuando los datos cambian. En
+este proyecto, en ambos caminos vas a construir exactamente las mismas tres piezas:
+
+- Un **modelo de datos** (`Pedido`, `Cliente`) en TypeScript.
+- Un **servicio HTTP** que llama a `/api/pedidos` (GET/POST/PUT/DELETE).
+- Un **componente de formulario** (crear/editar) y un **componente de tabla** (listar/eliminar), orquestados por un componente raíz.
+
+## 2.2 ¿En qué se diferencian?
+
+| Concepto | Vue | Angular |
+|---|---|---|
+| Un componente es... | Un archivo `.vue` con `<script>`, `<template>` y `<style>` juntos | Una clase de TypeScript decorada con `@Component`, con archivos `.ts`/`.html`/`.css` separados |
+| Enlazar un input a una variable | `v-model="formulario.nombre"` | `[(ngModel)]="formulario.nombre"` |
+| Recibir datos de un componente padre | `defineProps<{ pedidoAEditar }>()` | `@Input() pedidoAEditar` |
+| Avisar al padre de un evento | `defineEmits` + `emit('guardar', ...)` | `@Output() guardar = new EventEmitter()` |
+| Reaccionar a cambios en un prop | `watch(() => props.x, ...)` | `ngOnChanges(changes)` |
+| Reaccionar al montar el componente | `onMounted(...)` | `ngOnInit()` |
+| Llamadas HTTP | librería externa (`axios`) | `HttpClient`, incluido en el framework |
+| Curva de aprendizaje inicial | Más suave — plantillas parecidas a HTML | Más empinada — más conceptos desde el día 1 (decoradores, inyección de dependencias, RxJS) |
+
+:::note[💡 ¿Cuál "es mejor"?]
+Ninguno — son herramientas con filosofías distintas para el mismo problema. Vue tiende a
+sentirse más cercano a HTML/JS plano, lo que lo hace popular como primer framework. Angular
+trae más estructura y convenciones "de fábrica" (inyección de dependencias, tipado estricto, un
+CLI muy completo), lo que lo hace común en equipos grandes y en empresas que ya usan C#/Java.
+Aprender los dos — aunque sea con el mismo ejemplo, como aquí — es la mejor forma de entender
+qué es "framework" y qué es "problema real que todo framework tiene que resolver".
+:::

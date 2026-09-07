@@ -1,0 +1,49 @@
+---
+interface Props {
+	titulo: string;
+	src: string;
+	alt: string;
+}
+const { titulo, src, alt } = Astro.props;
+---
+
+<figure class="resultado">
+	<figcaption class="resultado-cabecera">
+		<span class="punto"></span>
+		{titulo}
+	</figcaption>
+	<img src={src} alt={alt} loading="lazy" />
+</figure>
+
+<style>
+	.resultado {
+		border: 1px solid var(--sl-color-hairline);
+		border-radius: 10px;
+		overflow: hidden;
+		margin: 1.5rem 0;
+		background: var(--sl-color-bg);
+	}
+	.resultado-cabecera {
+		background: var(--sl-color-black);
+		color: var(--sl-color-gray-2);
+		font-size: 0.78rem;
+		font-weight: 700;
+		padding: 0.55rem 0.9rem;
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+	.punto {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: #34d399;
+		display: inline-block;
+		flex-shrink: 0;
+	}
+	.resultado img {
+		display: block;
+		width: 100%;
+		margin: 0;
+	}
+</style>

@@ -1,0 +1,397 @@
+---
+title: "Parte 3 (Angular): Construyendo el frontend"
+description: Paso a paso — modelos, HttpClient, componentes standalone de formulario y tabla en Angular.
+---
+
+import Resultado from '../../../components/Resultado.astro';
+import { Steps } from '@astrojs/starlight/components';
+
+Vas a construir `Frontend.Angular` pieza por pieza: modelo, servicio HTTP con `HttpClient`,
+componente de formulario y componente de tabla, standalone (sin NgModules). El proyecto ya
+existe en el repo como referencia funcional.
+
+:::caution[📁 ¿Nuevo proyecto o el existente?]
+Igual que en el camino Vue: puedes crear un proyecto Angular nuevo y construirlo tú mismo
+siguiendo los pasos, o abrir `Frontend.Angular` y estudiar/modificar cada archivo. Recomendamos
+construirlo desde cero al menos una vez.
+:::
+
+## 3.1 Conceptos básicos de Angular
+
+A diferencia de Vue, un componente Angular es una **clase de TypeScript** decorada con
+`@Component`, con su plantilla y estilos normalmente en archivos separados:
+
+```ts title="ejemplo.component.ts"
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-ejemplo',
+  standalone: true,          // componente autónomo, sin NgModule
+  templateUrl: './ejemplo.component.html',
+  styleUrl: './ejemplo.component.css'
+})
+export class EjemploComponent {
+  contador = 0; // propiedad normal de la clase — no necesita "ref"
+}
+```
+
+```html title="ejemplo.component.html"
+<button (click)="contador = contador + 1">{{ contador }}</button>
+```
+
+:::note[💡 Concepto: detección de cambios]
+En Vue envuelves un valor con `ref()` para hacerlo reactivo. En Angular, una propiedad normal
+de la clase (`contador = 0`) ya es "observable" por el framework: Angular corre su propio ciclo
+de **detección de cambios** después de eventos (clicks, respuestas HTTP, temporizadores) y
+vuelve a evaluar la plantilla. No necesitas una API especial para que una propiedad sea
+reactiva — la contrapartida es que Angular tiene que decidir cuándo re-evaluar, lo cual trae
+más maquinaria interna que la reactividad explícita de Vue.
+:::
+
+## 3.2 Crear el proyecto
+
+```bash title="terminal"
+npx @angular/cli@19 new Frontend.Angular --standalone --routing=false --style=css
+cd Frontend.Angular
+npm start   # equivalente a: npx ng serve
+```
+
+El flag `--standalone` genera componentes sin NgModules (el estilo moderno, recomendado desde
+Angular 17+). `--routing=false` porque esta app de una sola pantalla no necesita rutas.
+
+## 3.3 El modelo: Pedido y Cliente
+
+Idéntico en espíritu al de Vue — son solo interfaces de TypeScript, no tienen nada específico
+de Angular:
+
+```ts title="src/app/models/pedido.ts"
+export interface Cliente {
+  nombre: string;
+  email: string;
+}
+
+export interface Pedido {
+  id?: number | null;
+  fecha: string;
+  total: number;
+  cliente: Cliente;
+}
+```
+
+## 3.4 El servicio HTTP con HttpClient
+
+Angular trae su propio cliente HTTP incorporado (no hace falta instalar axios). Primero
+habilítalo en la configuración de la app:
+
+```ts title="src/app/app.config.ts"
+import { ApplicationConfig } from '@angular/core';
+import { provideHttpClient } from '@angular/common/http';
+
+export const appConfig: ApplicationConfig = {
+  providers: [provideHttpClient()]
+};
+```
+
+`HttpClient` devuelve **Observables** (de la librería RxJS), no Promesas. Para poder escribir
+el resto del código con `async/await` — igual que en la versión Vue, y así comparar ambas casi
+línea por línea — usamos `firstValueFrom` para convertir el Observable en una Promesa:
+
+```ts title="src/app/services/pedido.service.ts"
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import type { Pedido } from '../models/pedido';
+
+const API_URL = 'http://localhost:5000/api/pedidos';
+
+@Injectable({ providedIn: 'root' })
+export class PedidoService {
+  constructor(private http: HttpClient) {}
+
+  obtenerTodos(): Promise<Pedido[]> {
+    return firstValueFrom(this.http.get<Pedido[]>(API_URL));
+  }
+  crear(pedido: Pedido): Promise<Pedido> {
+    return firstValueFrom(this.http.post<Pedido>(API_URL, pedido));
+  }
+  actualizar(id: number, pedido: Pedido): Promise<void> {
+    return firstValueFrom(this.http.put<void>(`${API_URL}/${id}`, pedido));
+  }
+  eliminar(id: number): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${API_URL}/${id}`));
+  }
+}
+```
+
+:::note[💡 Concepto: `@Injectable` e inyección de dependencias en el frontend]
+Igual que `IPedidoService` en el backend .NET (Parte 1), Angular tiene su propio sistema de
+inyección de dependencias. `providedIn: 'root'` le dice a Angular "crea una única instancia de
+este servicio para toda la app, y dásela a quien la pida por constructor" — por eso
+`AppComponent` más abajo simplemente declara `private pedidoService: PedidoService` en su
+constructor, sin hacer `new PedidoService()` en ningún lado.
+:::
+
+## 3.5 Componente de formulario
+
+Angular no tiene `v-model`, pero `FormsModule` ofrece `[(ngModel)]`, que hace exactamente lo
+mismo: enlace de datos en dos direcciones entre un input y una propiedad.
+
+```ts title="pedido-form.component.ts"
+import { Component, EventEmitter, Input, Output, OnChanges } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import type { Pedido } from '../../models/pedido';
+
+@Component({
+  selector: 'app-pedido-form',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './pedido-form.component.html'
+})
+export class PedidoFormComponent implements OnChanges {
+  @Input() pedidoAEditar: Pedido | null = null;
+  @Output() guardar = new EventEmitter<Pedido>();
+  @Output() cancelar = new EventEmitter<void>();
+
+  formulario: Pedido = { id: null, fecha: '', total: 0, cliente: { nombre: '', email: '' } };
+
+  ngOnChanges() {
+    // se ejecuta cada vez que cambia @Input pedidoAEditar (equivalente al watch de Vue)
+    if (this.pedidoAEditar) {
+      this.formulario = { ...this.pedidoAEditar, cliente: { ...this.pedidoAEditar.cliente } };
+    } else {
+      this.limpiar();
+    }
+  }
+
+  submit() {
+    this.guardar.emit({ ...this.formulario });
+  }
+
+  limpiar() {
+    this.formulario = { id: null, fecha: '', total: 0, cliente: { nombre: '', email: '' } };
+  }
+}
+```
+
+```html title="pedido-form.component.html"
+<form (ngSubmit)="submit()">
+  <input [(ngModel)]="formulario.cliente.nombre" name="nombre" required />
+  <input [(ngModel)]="formulario.cliente.email" name="email" type="email" required />
+  <input [(ngModel)]="formulario.fecha" name="fecha" type="datetime-local" required />
+  <input [(ngModel)]="formulario.total" name="total" type="number" step="0.01" required />
+  <button type="submit">{{ formulario.id ? 'Actualizar' : 'Guardar' }}</button>
+  <button *ngIf="formulario.id" type="button" (click)="limpiar()">Cancelar</button>
+</form>
+```
+
+:::caution[⚠️ Nota: cada campo de un formulario con `ngModel` necesita `name`]
+A diferencia de `v-model`, Angular exige un atributo `name` único por cada input dentro de un
+`<form>` con `ngModel` — lo usa internamente para registrar el control en el formulario.
+Olvidarlo es uno de los errores más comunes al empezar con formularios en Angular.
+:::
+
+:::tip[📝 Ejercicio 3.2 — Construye pedido-form.component]
+<Steps>
+1. Declara `@Input pedidoAEditar` y los dos `@Output`.
+2. Implementa `ngOnChanges` para precargar el formulario en modo edición.
+3. Arma la plantilla con los 4 campos usando `[(ngModel)]`, recuerda el atributo `name`.
+4. Agrega el botón "Cancelar" con `*ngIf="formulario.id"`.
+</Steps>
+:::
+
+<Resultado
+	titulo="Resultado esperado — formulario con datos antes de enviar"
+	src="/img/angular/formulario-lleno.png"
+	alt="Formulario Angular con los campos Nombre, Email, Fecha y Total llenos, botón Guardar Pedido"
+/>
+
+## 3.6 Componente de tabla
+
+```ts title="pedido-tabla.component.ts"
+import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import type { Pedido } from '../../models/pedido';
+
+@Component({
+  selector: 'app-pedido-tabla',
+  standalone: true,
+  imports: [CommonModule],
+  templateUrl: './pedido-tabla.component.html'
+})
+export class PedidoTablaComponent {
+  @Input() pedidos: Pedido[] = [];
+  @Input() cargando = false;
+  @Output() editar = new EventEmitter<Pedido>();
+  @Output() eliminar = new EventEmitter<number>();
+
+  formatearMoneda(val: number) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
+  }
+  formatearFecha(fechaStr: string) {
+    return new Date(fechaStr).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+  }
+}
+```
+
+```html title="pedido-tabla.component.html"
+<div *ngIf="cargando">Cargando pedidos...</div>
+<div *ngIf="!cargando && pedidos.length === 0">No hay pedidos registrados.</div>
+<table *ngIf="!cargando && pedidos.length > 0">
+  <tr *ngFor="let ped of pedidos">
+    <td>#{{ ped.id }}</td>
+    <td>{{ formatearFecha(ped.fecha) }}</td>
+    <td>{{ ped.cliente.nombre }} — {{ ped.cliente.email }}</td>
+    <td>{{ formatearMoneda(ped.total) }}</td>
+    <td>
+      <button (click)="editar.emit(ped)">Editar</button>
+      <button (click)="eliminar.emit(ped.id!)">Eliminar</button>
+    </td>
+  </tr>
+</table>
+```
+
+:::note[💡 Concepto: `*ngFor` / `*ngIf` vs `v-for` / `v-if`]
+Son la misma idea con distinta sintaxis: una **directiva estructural** que agrega o quita
+elementos del DOM según una condición o una colección. El asterisco (`*ngFor`, `*ngIf`) es
+azúcar sintáctico de Angular para una sintaxis más larga con `<ng-template>` — no necesitas
+entender eso todavía, solo saber que cumplen el mismo rol que `v-for`/`v-if` en Vue.
+:::
+
+:::tip[📝 Ejercicio 3.3 — Construye pedido-tabla.component]
+<Steps>
+1. Declara los dos `@Input` y los dos `@Output`.
+2. Escribe los métodos de formateo de fecha y moneda.
+3. Arma la plantilla con los tres estados (cargando / vacío / con datos) y los botones de acción.
+</Steps>
+:::
+
+## 3.7 El componente raíz: AppComponent
+
+```ts title="app.component.ts"
+import { Component, OnInit } from '@angular/core';
+import { PedidoService } from './services/pedido.service';
+import { PedidoFormComponent } from './components/pedido-form/pedido-form.component';
+import { PedidoTablaComponent } from './components/pedido-tabla/pedido-tabla.component';
+import type { Pedido } from './models/pedido';
+
+@Component({
+  selector: 'app-root',
+  standalone: true,
+  imports: [PedidoFormComponent, PedidoTablaComponent],
+  templateUrl: './app.component.html'
+})
+export class AppComponent implements OnInit {
+  pedidos: Pedido[] = [];
+  cargando = false;
+  pedidoSeleccionado: Pedido | null = null;
+
+  constructor(private pedidoService: PedidoService) {}
+
+  ngOnInit() {
+    this.cargarPedidos();
+  }
+
+  async cargarPedidos() {
+    this.cargando = true;
+    this.pedidos = await this.pedidoService.obtenerTodos();
+    this.cargando = false;
+  }
+
+  async guardarPedido(pedido: Pedido) {
+    if (pedido.id) {
+      await this.pedidoService.actualizar(pedido.id, pedido);
+    } else {
+      await this.pedidoService.crear(pedido);
+    }
+    this.pedidoSeleccionado = null;
+    await this.cargarPedidos();
+  }
+
+  async borrarPedido(id: number) {
+    if (confirm(`¿Eliminar el pedido #${id}?`)) {
+      await this.pedidoService.eliminar(id);
+      await this.cargarPedidos();
+    }
+  }
+}
+```
+
+```html title="app.component.html"
+<app-pedido-form
+  [pedidoAEditar]="pedidoSeleccionado"
+  (guardar)="guardarPedido($event)"
+  (cancelar)="pedidoSeleccionado = null">
+</app-pedido-form>
+
+<app-pedido-tabla
+  [pedidos]="pedidos"
+  [cargando]="cargando"
+  (editar)="pedidoSeleccionado = $event"
+  (eliminar)="borrarPedido($event)">
+</app-pedido-tabla>
+```
+
+Compara esto con `App.vue` de la Parte 3 (Vue): la lógica es prácticamente idéntica línea por
+línea (misma condición POST-vs-PUT, mismo `confirm()`, mismo flujo de recarga). Lo único que
+cambió de verdad es la sintaxis del framework — la **lógica de negocio del CRUD no le pertenece
+a ningún framework**.
+
+:::tip[📝 Ejercicio 3.4 — Conecta todo en AppComponent]
+<Steps>
+1. Declara el estado (`pedidos`, `cargando`, `pedidoSeleccionado`).
+2. Inyecta `PedidoService` por constructor.
+3. Implementa `ngOnInit`, `cargarPedidos`, `guardarPedido`, `borrarPedido`.
+4. Conecta `app-pedido-form` y `app-pedido-tabla` con sus inputs/outputs.
+</Steps>
+:::
+
+## 3.8 Corre el proyecto y compara resultados
+
+```bash title="terminal"
+npm start
+```
+
+Con el backend de la Parte 1 corriendo en paralelo, abre `http://localhost:4200`.
+
+<Resultado
+	titulo="Resultado esperado — primera carga, sin pedidos"
+	src="/img/angular/estado-vacio.png"
+	alt="App Angular recién cargada: formulario vacío y tabla mostrando No hay pedidos registrados"
+/>
+
+<Resultado
+	titulo="Resultado esperado — después de crear varios pedidos"
+	src="/img/angular/tabla-con-datos.png"
+	alt="Tabla de pedidos en Angular con tres filas, mismo formato visual que la versión Vue"
+/>
+
+<Resultado
+	titulo="Resultado esperado — modo edición"
+	src="/img/angular/formulario-edicion.png"
+	alt="Formulario Angular en modo Editar Pedido con datos precargados"
+/>
+
+:::note[🔍 Compara con Vue]
+Si hiciste ambos caminos, nota que el resultado visual es intencionalmente casi idéntico (misma
+paleta de colores, mismos textos, mismo layout) — la diferencia real está en el código que ya
+comparaste en la [Parte 2](/guia/parte-2-elige-camino/), no en lo que ve el usuario final. Eso
+es justamente lo que hace al framework una decisión de *implementación*, no de producto.
+:::
+
+:::tip[📝 Ejercicio 3.5 — CRUD completo desde la interfaz]
+Desde el navegador: crea 3 pedidos, edita uno, elimina otro, y refresca la página para confirmar que los datos persisten en el backend.
+:::
+
+:::tip[📝 Ejercicio 3.6 — Extiende el CRUD (reto opcional)]
+- Agrega validación de formato de email con `Validators.email` migrando a Reactive Forms (un paso más avanzado que `ngModel`).
+- Muestra un mensaje de error si una llamada HTTP falla (hoy no hay manejo de errores).
+- Agrega un campo de búsqueda que filtre la tabla por nombre de cliente.
+:::
+
+## 3.9 Siguientes pasos
+
+Sigue a la [Parte 4](/guia/parte-4-conectando/) para entender a fondo la conexión
+frontend-backend, y luego a la [Parte 5](/guia/parte-5-sqlite/) para reemplazar los archivos
+por SQLite — el backend cambia, pero este frontend Angular sigue funcionando exactamente igual,
+sin tocarlo.

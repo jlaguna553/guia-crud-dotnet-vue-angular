@@ -1,0 +1,95 @@
+---
+title: "Bienvenida: construye un CRUD real, dos veces"
+description: Guía práctica paso a paso para construir un CRUD completo con .NET, y con Vue o Angular a elección, incluyendo SQLite.
+---
+
+import { Card, CardGrid, LinkCard, Steps, Badge } from '@astrojs/starlight/components';
+
+Esta guía te lleva paso a paso a construir el mismo sistema — un CRUD de "Pedidos" — usando
+una API en **.NET** como backend, y un frontend en **Vue 3** o **Angular** (tú eliges). Al
+final también aprenderás a reemplazar el almacenamiento en archivos por una base de datos real
+con **SQLite**.
+
+<CardGrid>
+	<Card title=".NET 10" icon="seti:c-sharp">ASP.NET Core + patrón Strategy</Card>
+	<Card title="Vue 3" icon="seti:vue">TypeScript + Composition API</Card>
+	<Card title="Angular 19" icon="puzzle">Componentes standalone</Card>
+	<Card title="SQLite" icon="database">Entity Framework Core</Card>
+</CardGrid>
+
+## ¿Qué vas a construir?
+
+Un sistema de **Pedidos**: cada pedido tiene una fecha, un total en dinero, y un cliente (con
+nombre y email). Vas a poder **crear**, **ver**, **editar** y **eliminar** pedidos desde una
+interfaz web que habla con una API por HTTP. Es el ejercicio clásico de CRUD (Create, Read,
+Update, Delete), con dos detalles que lo hacen más realista que un ejemplo de "tareas
+pendientes":
+
+- Cada pedido tiene un **objeto anidado** (el cliente dentro del pedido), no solo campos sueltos.
+- Maneja **fechas** y **números decimales** (dinero), dos fuentes clásicas de bugs para quien empieza.
+
+:::note[💡 Concepto: ¿qué es un CRUD?]
+CRUD es un acrónimo de las cuatro operaciones básicas que casi cualquier aplicación hace sobre
+datos: **C**rear, **R**ead (leer), **U**pdate (actualizar) y **D**elete (eliminar). Casi todo
+software con una base de datos — una red social, una tienda, un banco — es, en el fondo,
+muchos CRUDs conectados entre sí. Dominar cómo construir uno de punta a punta (interfaz → API
+→ almacenamiento) es una de las habilidades más transferibles que existen en programación.
+:::
+
+## Arquitectura del proyecto
+
+El proyecto ya tiene dos piezas construidas, y tú vas a construir o entender una tercera:
+
+- **Backend.Api** — una API REST en .NET que expone `/api/pedidos`. Ya existe: la vas a estudiar en la [Parte 1](/guia/parte-1-backend/).
+- **Frontend.UI** — el cliente en Vue 3 + TypeScript. Ya existe como referencia; si eliges el camino Vue, la [Parte 3](/guia/parte-3-vue/) te enseña a reconstruirlo entendiendo cada pieza.
+- **Frontend.Angular** — el mismo cliente, reescrito en Angular. Lo cubre la [Parte 3 (Angular)](/guia/parte-3-angular/).
+
+```text title="arquitectura"
+┌────────────────────┐        HTTP / JSON        ┌──────────────────────┐
+│  Frontend.UI (Vue)  │ ────────────────────────▶ │                      │
+│  ó Frontend.Angular │ ◀──────────────────────── │     Backend.Api      │
+└────────────────────┘   GET / POST / PUT / DELETE│      (.NET / C#)     │
+                                                    └──────────┬───────────┘
+                                                               │
+                                          Strategy intercambiable
+                                                               │
+                                 ┌─────────────┬────────────────┴──────────────┐
+                                 ▼             ▼                               ▼
+                         pedidos.json   pedidos.xml                  pedidos.db (SQLite)
+                          (por defecto)                             (Parte 5, opcional)
+```
+
+El punto clave que vas a ver una y otra vez en esta guía: **el frontend nunca sabe cómo se
+guardan los datos**. Solo habla HTTP con la API. Eso es lo que te permite, más adelante,
+cambiar de archivos JSON a una base de datos SQLite sin tocar ni una línea del frontend.
+
+## Requisitos previos
+
+Esta guía asume que ya sabes HTML/CSS básico y JavaScript/TypeScript básico (variables,
+funciones, `async/await`). No necesitas experiencia previa con Vue, Angular, .NET ni bases de
+datos: eso es justamente lo que enseña esta guía.
+
+## Herramientas que necesitas instalar
+
+| Herramienta | Para qué | Verificar instalación |
+|---|---|---|
+| .NET SDK 10 | Compilar y correr Backend.Api | `dotnet --version` |
+| Node.js 20+ | Correr Vite (Vue) y/o Angular CLI | `node --version` |
+| Un editor de código | VS Code recomendado | — |
+
+:::tip[📝 Ejercicio 0.1 — Verifica tu entorno]
+<Steps>
+1. Abre una terminal.
+2. Ejecuta `dotnet --version`, `node --version` y `npm --version`.
+3. Anota qué versión te devuelve cada uno. Si alguno falla con "comando no encontrado", instala esa herramienta antes de continuar.
+</Steps>
+:::
+
+## Cómo está organizada esta guía
+
+Después de entender el backend (Parte 1), vas a **elegir un camino** en la Parte 2: construir
+el frontend con **Vue** o con **Angular**. No hace falta que hagas los dos — elige el que
+quieras aprender primero. Ambos caminos terminan en el mismo lugar: la Parte 4 (conectar todo)
+y la Parte 5 (SQLite), que aplican sin importar qué frontend hayas elegido.
+
+<LinkCard title="Empezar por la Parte 1" description="El backend en .NET: API REST, controladores y el patrón Strategy." href="/guia/parte-1-backend/" />

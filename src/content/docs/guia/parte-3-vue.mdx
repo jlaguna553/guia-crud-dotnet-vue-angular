@@ -1,0 +1,365 @@
+---
+title: "Parte 3 (Vue): Construyendo el frontend"
+description: Paso a paso — modelos, servicio HTTP con axios, componentes de formulario y tabla en Vue 3 + TypeScript.
+---
+
+import Resultado from '../../../components/Resultado.astro';
+import { Steps } from '@astrojs/starlight/components';
+
+Vas a construir `Frontend.UI` pieza por pieza: tipos, servicio HTTP, componente de formulario,
+componente de tabla, y el componente raíz que los conecta. El proyecto ya existe como
+referencia — úsalo para comparar tu solución, no para copiar y pegar sin entender.
+
+:::caution[📁 ¿Nuevo proyecto o el existente?]
+Puedes seguir esta parte de dos formas: (a) crear un proyecto Vue nuevo desde cero en otra
+carpeta y construir todo tú mismo siguiendo los pasos, comparando al final con `Frontend.UI`; o
+(b) abrir `Frontend.UI` directamente y leer/modificar cada archivo a medida que avanzas. La
+opción (a) enseña más — recomendamos esa si tienes tiempo.
+:::
+
+## 3.1 Conceptos básicos de Vue
+
+Un componente Vue de "Single File Component" (`.vue`) tiene tres bloques:
+
+```vue title="Ejemplo.vue"
+<script setup lang="ts">
+// lógica: variables reactivas, funciones, props, emits
+import { ref } from 'vue';
+const contador = ref(0); // "ref" crea una variable reactiva
+</script>
+
+<template>
+  <!-- lo que se ve, con enlaces a la lógica de arriba -->
+  <button @click="contador++">{{ contador }}</button>
+</template>
+
+<style scoped>
+/* CSS que solo aplica a este componente */
+</style>
+```
+
+:::note[💡 Concepto: reactividad con `ref`]
+`ref(valorInicial)` envuelve un valor en un objeto reactivo: cuando cambias `miRef.value`, Vue
+automáticamente vuelve a renderizar cualquier parte de la plantilla que use esa variable. En la
+plantilla no escribes `.value` — Vue lo "desenvuelve" automáticamente ahí. Es la base de todo
+el framework: en vez de tú actualizar el DOM a mano, describes qué depende de qué, y Vue se
+encarga del resto.
+:::
+
+## 3.2 Crear el proyecto
+
+```bash title="terminal"
+npm create vite@latest Frontend.UI -- --template vue-ts
+cd Frontend.UI
+npm install
+npm install axios
+```
+
+El proyecto de referencia además usa Tailwind CSS para los estilos. Es opcional para el
+aprendizaje — puedes usar CSS plano — pero si quieres el mismo resultado visual:
+
+```bash title="terminal"
+npm install tailwindcss @tailwindcss/vite
+```
+
+## 3.3 Los tipos: Pedido y Cliente
+
+Antes de escribir cualquier componente, define la forma de tus datos en TypeScript. Esto te da
+autocompletado y errores en tiempo de compilación si te equivocas de nombre de campo — muy
+valioso cuando el objeto tiene anidación.
+
+```ts title="src/types/pedido.ts"
+export interface Cliente {
+  nombre: string;
+  email: string;
+}
+
+export interface Pedido {
+  id?: number | null;
+  fecha: string;
+  total: number;
+  cliente: Cliente;
+}
+```
+
+Nota que `id` es opcional (`?`) y puede ser `null`: un pedido nuevo, antes de guardarse,
+todavía no tiene id — lo asigna el backend.
+
+## 3.4 El servicio HTTP
+
+Aísla todas las llamadas a la API en un solo archivo. Así, si el día de mañana cambias de
+`axios` a `fetch`, o cambia la URL, solo tocas un lugar.
+
+```ts title="src/services/pedidoService.ts"
+import axios from 'axios';
+import type { Pedido } from '../types/pedido';
+
+const API_URL = 'http://localhost:5000/api/pedidos';
+
+export const pedidoService = {
+  async obtenerTodos(): Promise<Pedido[]> {
+    const res = await axios.get<Pedido[]>(API_URL);
+    return res.data;
+  },
+  async crear(pedido: Omit<Pedido, 'id'>): Promise<Pedido> {
+    const res = await axios.post<Pedido>(API_URL, pedido);
+    return res.data;
+  },
+  async actualizar(id: number, pedido: Pedido): Promise<void> {
+    await axios.put(`${API_URL}/${id}`, pedido);
+  },
+  async eliminar(id: number): Promise<void> {
+    await axios.delete(`${API_URL}/${id}`);
+  }
+};
+```
+
+:::tip[📝 Ejercicio 3.1 — Prueba el servicio aislado]
+Antes de construir ningún componente, escribe un pequeño script temporal (o usa la consola del
+navegador con el proyecto corriendo) que llame a `pedidoService.obtenerTodos()` y haga
+`console.log` del resultado. Confirma que ves el mismo array que veías con `curl` en la Parte 1
+antes de seguir.
+:::
+
+## 3.5 Componente de formulario: PedidoForm.vue
+
+Este componente hace dos trabajos: crear un pedido nuevo, y editar uno existente — con el mismo
+formulario. La clave para lograrlo es un **prop** opcional (`pedidoAEditar`): si viene `null`,
+el formulario está vacío ("modo crear"); si trae un pedido, lo precarga ("modo editar").
+
+```vue title="src/components/PedidoForm.vue"
+<script setup lang="ts">
+import { ref, watch } from 'vue';
+import type { Pedido } from '../types/pedido';
+
+const props = defineProps<{ pedidoAEditar?: Pedido | null }>();
+const emit = defineEmits<{
+  (e: 'guardar', pedido: Pedido): void;
+  (e: 'cancelar'): void;
+}>();
+
+const formulario = ref<Pedido>({
+  id: null, fecha: obtenerFechaActualIso(), total: 0.0,
+  cliente: { nombre: '', email: '' }
+});
+
+const submit = () => {
+  emit('guardar', { ...formulario.value });
+};
+
+// watch: cuando el padre cambia pedidoAEditar (click en "Editar"),
+// rellenamos el formulario con esos datos
+watch(() => props.pedidoAEditar, (nuevoVal) => {
+  if (nuevoVal) {
+    formulario.value = { ...nuevoVal, cliente: { ...nuevoVal.cliente } };
+  } else {
+    // limpiar formulario
+  }
+}, { immediate: true });
+</script>
+
+<template>
+  <form @submit.prevent="submit">
+    <input v-model="formulario.cliente.nombre" required />
+    <input v-model="formulario.cliente.email" type="email" required />
+    <input v-model="formulario.fecha" type="datetime-local" required />
+    <input v-model.number="formulario.total" type="number" step="0.01" required />
+    <button type="submit">{{ formulario.id ? 'Actualizar' : 'Guardar' }}</button>
+  </form>
+</template>
+```
+
+:::note[💡 Concepto: `v-model` en un campo anidado]
+`v-model="formulario.cliente.nombre"` enlaza el input directamente a un campo *dentro* del
+objeto anidado `cliente`. No necesitas ningún código extra para "sincronizar" ese campo — Vue
+lee y escribe directamente esa ruta del objeto. Y `v-model.number` en el campo de total le dice
+a Vue que convierta el texto del input a `number` automáticamente (si no,
+`formulario.total` sería el string `"150.50"` en vez del número `150.50`).
+:::
+
+:::note[💡 Concepto: props y emits]
+Un componente hijo **recibe** datos del padre por *props* (`defineProps`) y **avisa** al padre
+de cosas que pasaron con *eventos* (`defineEmits` + `emit(...)`). El hijo nunca modifica
+directamente el estado del padre — solo emite "oye, pasó esto" y el padre decide qué hacer.
+Este flujo de datos en una sola dirección (props hacia abajo, eventos hacia arriba) es uno de
+los principios más importantes al construir UIs con componentes, sin importar el framework.
+:::
+
+:::tip[📝 Ejercicio 3.2 — Construye PedidoForm.vue]
+<Steps>
+1. Crea los 4 campos del formulario (nombre, email, fecha, total) con `v-model`.
+2. Agrega el botón de enviar, que emita `guardar` con una copia del formulario.
+3. Agrega el `watch` sobre `pedidoAEditar` para el modo edición.
+4. Agrega un botón "Cancelar" que solo se muestre si `formulario.id` tiene valor (`v-if`).
+</Steps>
+:::
+
+<Resultado
+	titulo="Resultado esperado — formulario con datos antes de enviar"
+	src="/img/vue/formulario-lleno.png"
+	alt="Formulario de PedidoForm.vue con los campos Nombre, Email, Fecha y Total llenos, botón Guardar Pedido en índigo"
+/>
+
+## 3.6 Componente de tabla: PedidoTabla.vue
+
+Recibe la lista de pedidos y dos flags de estado (cargando, vacío), y emite eventos cuando el
+usuario pide editar o eliminar una fila.
+
+```vue title="src/components/PedidoTabla.vue"
+<script setup lang="ts">
+import type { Pedido } from '../types/pedido';
+
+defineProps<{ pedidos: Pedido[]; cargando: boolean }>();
+defineEmits<{
+  (e: 'editar', pedido: Pedido): void;
+  (e: 'eliminar', id: number): void;
+}>();
+
+const formatearMoneda = (val: number) =>
+  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
+
+const formatearFecha = (fechaStr: string) =>
+  new Date(fechaStr).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+</script>
+
+<template>
+  <div v-if="cargando">Cargando pedidos...</div>
+  <div v-else-if="pedidos.length === 0">No hay pedidos registrados.</div>
+  <table v-else>
+    <tr v-for="ped in pedidos" :key="ped.id!">
+      <td>#{{ ped.id }}</td>
+      <td>{{ formatearFecha(ped.fecha) }}</td>
+      <td>{{ ped.cliente.nombre }} — {{ ped.cliente.email }}</td>
+      <td>{{ formatearMoneda(ped.total) }}</td>
+      <td>
+        <button @click="$emit('editar', ped)">Editar</button>
+        <button @click="$emit('eliminar', ped.id!)">Eliminar</button>
+      </td>
+    </tr>
+  </table>
+</template>
+```
+
+:::note[💡 Concepto: `Intl`, el formateador nativo del navegador]
+`Intl.NumberFormat` e `Intl.DateTimeFormat` (usado aquí vía `toLocaleString`) son APIs nativas
+de JavaScript para formatear números, monedas y fechas respetando las convenciones de una
+configuración regional (*locale*) — en este caso `es-MX`. No necesitas ninguna librería externa
+para mostrar `$150.50` en vez de `150.5`, o `7 sep 2026` en vez de `2026-09-07T13:36:00`.
+:::
+
+:::tip[📝 Ejercicio 3.3 — Construye PedidoTabla.vue]
+<Steps>
+1. Renderiza la lista con `v-for`, usando `:key` con el id.
+2. Maneja los tres estados: cargando, vacío, con datos (`v-if` / `v-else-if` / `v-else`).
+3. Agrega los botones Editar/Eliminar que emiten los eventos correspondientes.
+</Steps>
+:::
+
+## 3.7 El componente raíz: App.vue
+
+Es el único componente que habla con `pedidoService` directamente, y el que mantiene el estado
+compartido: la lista de pedidos, si está cargando, y cuál pedido (si alguno) se está editando.
+
+```vue title="src/App.vue"
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { pedidoService } from './services/pedidoService';
+
+const pedidos = ref<Pedido[]>([]);
+const cargando = ref(false);
+const pedidoSeleccionado = ref<Pedido | null>(null);
+
+const cargarPedidos = async () => {
+  cargando.value = true;
+  pedidos.value = await pedidoService.obtenerTodos();
+  cargando.value = false;
+};
+
+const guardarPedido = async (pedidoData: Pedido) => {
+  if (pedidoData.id) {
+    await pedidoService.actualizar(pedidoData.id, pedidoData);
+  } else {
+    await pedidoService.crear(pedidoData);
+  }
+  pedidoSeleccionado.value = null;
+  await cargarPedidos();
+};
+
+const borrarPedido = async (id: number) => {
+  if (confirm(`¿Eliminar el pedido #${id}?`)) {
+    await pedidoService.eliminar(id);
+    await cargarPedidos();
+  }
+};
+
+onMounted(cargarPedidos); // se ejecuta una vez, cuando el componente aparece en pantalla
+</script>
+
+<template>
+  <PedidoForm :pedidoAEditar="pedidoSeleccionado" @guardar="guardarPedido" @cancelar="pedidoSeleccionado = null" />
+  <PedidoTabla :pedidos="pedidos" :cargando="cargando" @editar="(ped) => pedidoSeleccionado = ped" @eliminar="borrarPedido" />
+</template>
+```
+
+Fíjate en la decisión clave de `guardarPedido`: **si el pedido tiene `id`, es un PUT
+(actualizar); si no lo tiene, es un POST (crear)**. Con esa única condición, un mismo
+formulario sirve para ambas operaciones.
+
+:::tip[📝 Ejercicio 3.4 — Conecta todo en App.vue]
+<Steps>
+1. Declara los tres `ref` de estado.
+2. Escribe `cargarPedidos` y llámalo desde `onMounted`.
+3. Escribe `guardarPedido` con la lógica crear-vs-actualizar.
+4. Escribe `borrarPedido` con `confirm()`.
+5. Renderiza `PedidoForm` y `PedidoTabla`, conectando props y eventos.
+</Steps>
+:::
+
+## 3.8 Corre el proyecto y compara resultados
+
+```bash title="terminal"
+npm run dev
+```
+
+Con el backend de la Parte 1 corriendo en paralelo, abre la URL que te indique Vite (normalmente `http://localhost:5173`).
+
+<Resultado
+	titulo="Resultado esperado — primera carga, sin pedidos"
+	src="/img/vue/estado-vacio.png"
+	alt="App Vue recién cargada: formulario vacío y tabla mostrando el mensaje No hay pedidos registrados"
+/>
+
+<Resultado
+	titulo="Resultado esperado — después de crear varios pedidos"
+	src="/img/vue/tabla-con-datos.png"
+	alt="Tabla de pedidos con tres filas mostrando id, fecha, cliente anidado y total formateado como moneda"
+/>
+
+<Resultado
+	titulo="Resultado esperado — modo edición, tras hacer click en Editar"
+	src="/img/vue/formulario-edicion.png"
+	alt="Formulario en modo Editar Pedido con los datos del pedido precargados y el botón Cancelar visible"
+/>
+
+:::tip[📝 Ejercicio 3.5 — CRUD completo desde la interfaz]
+Sin usar curl esta vez, desde el navegador:
+<Steps>
+1. Crea 3 pedidos distintos.
+2. Edita uno cambiando el total.
+3. Elimina uno y confirma que la tabla se actualiza sola.
+4. Refresca la página (F5) y confirma que los datos siguen ahí — están en `Data/pedidos.json`, no en memoria del navegador.
+</Steps>
+:::
+
+:::tip[📝 Ejercicio 3.6 — Extiende el CRUD (reto opcional)]
+- Valida que el email tenga formato válido antes de enviar el formulario.
+- Muestra un mensaje de error visible si la API responde con un error (hoy solo hace `console.error`).
+- Agrega un campo de búsqueda que filtre la tabla por nombre de cliente.
+:::
+
+## 3.9 Siguientes pasos
+
+Con el frontend funcionando end-to-end, sigue a la [Parte 4](/guia/parte-4-conectando/) para
+entender a fondo cómo conversan frontend y backend, y luego a la [Parte 5](/guia/parte-5-sqlite/)
+para reemplazar los archivos por una base de datos SQLite real — sin tocar ni un archivo de
+este frontend.
