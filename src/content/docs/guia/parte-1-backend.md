@@ -8,6 +8,9 @@ consumir. Vamos a ir despacio: en cada sección agregas un poco de código, corr
 y revisas el resultado real en la terminal antes de seguir. Nada de pegar todos los archivos de
 una vez — si un paso no funciona, lo vas a notar de inmediato porque el paso anterior sí corría.
 
+Además de la explicación en prosa, el código de esta guía trae **comentarios línea por línea**
+explicando qué hace cada parte y por qué se escribió así — léelos, no los borres al copiar.
+
 ## 1.1 ¿Qué es una API REST?
 
 Una API (Application Programming Interface) es simplemente una forma en la que un programa le
@@ -66,20 +69,22 @@ Primero, el modelo — la forma de un pedido. Este es el objeto anidado del que 
 introducción: un `Pedido` tiene dentro un `Cliente` completo, no solo un nombre suelto.
 
 ```csharp title="Models/Pedidos.cs"
-namespace Backend.Api.Models;
+namespace Backend.Api.Models; // agrupa las clases de este archivo bajo un mismo espacio de nombres
 
 public class Cliente
 {
+    // "{ get; set; }" (propiedad automática) expone el campo para leer y escribir;
+    // "= string.Empty" le da un valor inicial para que nunca sea null.
     public string Nombre { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
 }
 
 public class Pedido
 {
-    public int? Id { get; set; }
+    public int? Id { get; set; } // "int?" (nullable): un pedido nuevo aún no tiene id — lo asigna el backend
     public DateTime Fecha { get; set; }
-    public decimal Total { get; set; } // decimal, no float: precisión para dinero
-    public Cliente Cliente { get; set; } = new();
+    public decimal Total { get; set; } // decimal, no float: precisión exacta para dinero (ver nota abajo)
+    public Cliente Cliente { get; set; } = new(); // objeto anidado: cada Pedido "contiene" un Cliente completo
 }
 ```
 
@@ -93,19 +98,20 @@ evitar ese problema en cálculos financieros.
 Ahora el controlador, con dos pedidos escritos a mano y un único endpoint:
 
 ```csharp title="Controllers/PedidosController.cs"
-using Backend.Api.Models;
-using Microsoft.AspNetCore.Mvc;
+using Backend.Api.Models; // para poder usar las clases Pedido y Cliente definidas arriba
+using Microsoft.AspNetCore.Mvc; // trae ControllerBase, [ApiController], [HttpGet], IActionResult...
 
 namespace Backend.Api.Controllers;
 
-[ApiController]
-[Route("api/[controller]")]
-public class PedidosController : ControllerBase
+[ApiController] // activa comportamientos automáticos de API REST (validación de modelo, respuestas 400 automáticas, etc.)
+[Route("api/[controller]")] // "[controller]" se reemplaza por "Pedidos" (nombre de la clase sin "Controller") → ruta base api/pedidos
+public class PedidosController : ControllerBase // ControllerBase da acceso a Ok(), NotFound(), CreatedAtAction()...
 {
+    // "static readonly": una sola lista, compartida por todas las peticiones mientras el proceso esté corriendo
     private static readonly List<Pedido> _pedidos = new()
     {
         new Pedido {
-            Id = 1, Fecha = new DateTime(2026, 1, 15, 10, 30, 0), Total = 150.50m,
+            Id = 1, Fecha = new DateTime(2026, 1, 15, 10, 30, 0), Total = 150.50m, // la "m" marca el literal como decimal
             Cliente = new Cliente { Nombre = "Ana Martinez", Email = "ana@example.com" }
         },
         new Pedido {
@@ -114,20 +120,20 @@ public class PedidosController : ControllerBase
         }
     };
 
-    [HttpGet]
-    public IActionResult Get() => Ok(_pedidos);
+    [HttpGet] // responde a GET /api/pedidos (sin id en la URL → toda la colección)
+    public IActionResult Get() => Ok(_pedidos); // Ok(...): arma una respuesta 200 con el objeto serializado a JSON
 }
 ```
 
 Y `Program.cs` mínimo para que todo esto quede conectado:
 
 ```csharp title="Program.cs"
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddControllers();
+var builder = WebApplication.CreateBuilder(args); // arma la configuración de la app antes de arrancar (lee args, env, etc.)
+builder.Services.AddControllers(); // registra el soporte para clases *Controller como PedidosController
 
-var app = builder.Build();
-app.MapControllers();
-app.Run("http://0.0.0.0:5000");
+var app = builder.Build(); // construye la aplicación ya configurada
+app.MapControllers(); // conecta las rutas de los controladores; sin esto, [HttpGet] no respondería nada
+app.Run("http://0.0.0.0:5000"); // arranca el servidor y lo deja escuchando en el puerto 5000
 ```
 
 :::tip[📝 Haz esto ahora]
@@ -154,12 +160,12 @@ compilación que te dice exactamente en qué línea está el problema.
 Agrega este método dentro de la misma clase `PedidosController`, debajo de `Get()`:
 
 ```csharp title="Controllers/PedidosController.cs (agregar)"
-[HttpGet("{id}")]
+[HttpGet("{id}")] // "{id}" es un parámetro de ruta: GET /api/pedidos/2 → el parámetro id recibe el valor 2
 public IActionResult GetPorId(int id)
 {
-    var pedido = _pedidos.FirstOrDefault(p => p.Id == id);
-    if (pedido == null) return NotFound();
-    return Ok(pedido);
+    var pedido = _pedidos.FirstOrDefault(p => p.Id == id); // el primer elemento que cumple la condición, o null si ninguno
+    if (pedido == null) return NotFound(); // sin ese pedido, responde 404
+    return Ok(pedido); // si existe, responde 200 con el pedido serializado a JSON
 }
 ```
 
@@ -200,12 +206,14 @@ los casos comunes ya vienen resueltos de forma consistente.
 Agrega este método:
 
 ```csharp title="Controllers/PedidosController.cs (agregar)"
-[HttpPost]
-public IActionResult Post([FromBody] Pedido pedido)
+[HttpPost] // responde a POST /api/pedidos
+public IActionResult Post([FromBody] Pedido pedido) // [FromBody]: deserializa el JSON del cuerpo de la petición a un Pedido
 {
+    // el próximo id disponible = el mayor id existente + 1, o 1 si la lista está vacía
     pedido.Id = _pedidos.Any() ? _pedidos.Max(p => p.Id) + 1 : 1;
-    if (pedido.Fecha == default) pedido.Fecha = DateTime.Now;
+    if (pedido.Fecha == default) pedido.Fecha = DateTime.Now; // si el cliente no mandó fecha, usa la actual
     _pedidos.Add(pedido);
+    // 201 Created + la URL del nuevo recurso (apuntando a GetPorId) + el pedido creado en el body
     return CreatedAtAction(nameof(GetPorId), new { id = pedido.Id }, pedido);
 }
 ```
@@ -242,17 +250,17 @@ en la sección 1.7.
 Agrega estos dos métodos para completar el CRUD en memoria:
 
 ```csharp title="Controllers/PedidosController.cs (agregar)"
-[HttpPut("{id}")]
+[HttpPut("{id}")] // responde a PUT /api/pedidos/{id}
 public IActionResult Put(int id, [FromBody] Pedido pedido)
 {
-    var index = _pedidos.FindIndex(p => p.Id == id);
+    var index = _pedidos.FindIndex(p => p.Id == id); // posición del pedido en la lista, o -1 si no existe
     if (index == -1) return NotFound();
-    pedido.Id = id;
-    _pedidos[index] = pedido;
-    return NoContent();
+    pedido.Id = id; // fuerza que el id sea el de la URL, por si el cliente mandó otro distinto en el body
+    _pedidos[index] = pedido; // reemplaza el pedido completo en esa posición
+    return NoContent(); // 204: la operación funcionó, pero no hay nada que devolver en el body
 }
 
-[HttpDelete("{id}")]
+[HttpDelete("{id}")] // responde a DELETE /api/pedidos/{id}
 public IActionResult Delete(int id)
 {
     var pedido = _pedidos.FirstOrDefault(p => p.Id == id);
@@ -299,6 +307,8 @@ using Backend.Api.Models;
 
 namespace Backend.Api.Services;
 
+// El contrato: cualquier forma de guardar pedidos debe poder leer TODA la lista
+// y guardar TODA la lista. No dice CÓMO -- eso lo decide cada implementación concreta.
 public interface IPedidoStorageStrategy
 {
     Task<List<Pedido>> LeerPedidosAsync();
@@ -307,27 +317,29 @@ public interface IPedidoStorageStrategy
 ```
 
 ```csharp title="Services/JsonPedidoStorageStrategy.cs"
-using System.Text.Json;
+using System.Text.Json; // el serializador JSON incluido en .NET, sin instalar nada extra
 using Backend.Api.Models;
 
 namespace Backend.Api.Services;
 
-public class JsonPedidoStorageStrategy : IPedidoStorageStrategy
+public class JsonPedidoStorageStrategy : IPedidoStorageStrategy // implementa el contrato de arriba
 {
+    // ruta absoluta al archivo; se calcula una sola vez, cuando se crea una instancia de esta clase
     private readonly string _filePath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "pedidos.json");
 
     public async Task<List<Pedido>> LeerPedidosAsync()
     {
-        if (!File.Exists(_filePath)) return new List<Pedido>();
-        var json = await File.ReadAllTextAsync(_filePath);
+        if (!File.Exists(_filePath)) return new List<Pedido>(); // primera vez que corre: todavía no existe el archivo
+        var json = await File.ReadAllTextAsync(_filePath); // lee todo el contenido del archivo como texto plano
+        // convierte ese texto JSON en una lista de objetos Pedido; si el resultado es null, usa una lista vacía
         return JsonSerializer.Deserialize<List<Pedido>>(json) ?? new List<Pedido>();
     }
 
     public async Task GuardarPedidosAsync(List<Pedido> pedidos)
     {
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        var json = JsonSerializer.Serialize(pedidos, options);
-        await File.WriteAllTextAsync(_filePath, json);
+        var options = new JsonSerializerOptions { WriteIndented = true }; // WriteIndented: JSON legible, con saltos de línea
+        var json = JsonSerializer.Serialize(pedidos, options); // convierte la lista completa de objetos a texto JSON
+        await File.WriteAllTextAsync(_filePath, json); // sobreescribe el archivo entero con el contenido nuevo
     }
 }
 ```
@@ -341,12 +353,14 @@ using Backend.Api.Models;
 
 namespace Backend.Api.Services;
 
+// El contrato de "operaciones de negocio" sobre pedidos: lo que el controlador puede pedir,
+// sin saber si por debajo hay un archivo JSON, XML o (Parte 5) una base de datos.
 public interface IPedidoService
 {
     Task<List<Pedido>> ObtenerTodosAsync();
-    Task<Pedido?> ObtenerPorIdAsync(int id);
+    Task<Pedido?> ObtenerPorIdAsync(int id); // "Pedido?": puede que no exista ninguno con ese id
     Task<Pedido> CrearAsync(Pedido nuevoPedido);
-    Task<bool> ActualizarAsync(int id, Pedido pedidoActualizado);
+    Task<bool> ActualizarAsync(int id, Pedido pedidoActualizado); // bool: si encontró (y actualizó) el pedido
     Task<bool> EliminarAsync(int id);
 }
 ```
@@ -358,28 +372,30 @@ namespace Backend.Api.Services;
 
 public class PedidoService : IPedidoService
 {
-    private readonly IPedidoStorageStrategy _storage;
+    private readonly IPedidoStorageStrategy _storage; // depende de la INTERFAZ, no de JsonPedidoStorageStrategy directamente
 
+    // el contenedor de dependencias decide qué implementación concreta llega aquí (lo ves en Program.cs)
     public PedidoService(IPedidoStorageStrategy storage)
     {
         _storage = storage;
     }
 
+    // "=>" (expression body): forma corta para un método de una sola instrucción
     public async Task<List<Pedido>> ObtenerTodosAsync() => await _storage.LeerPedidosAsync();
 
     public async Task<Pedido?> ObtenerPorIdAsync(int id)
     {
-        var pedidos = await _storage.LeerPedidosAsync();
-        return pedidos.FirstOrDefault(p => p.Id == id);
+        var pedidos = await _storage.LeerPedidosAsync(); // trae TODOS los pedidos del almacenamiento...
+        return pedidos.FirstOrDefault(p => p.Id == id); // ...y busca el que corresponde ya en memoria
     }
 
     public async Task<Pedido> CrearAsync(Pedido nuevoPedido)
     {
         var pedidos = await _storage.LeerPedidosAsync();
-        nuevoPedido.Id = pedidos.Any() ? pedidos.Max(p => p.Id) + 1 : 1;
+        nuevoPedido.Id = pedidos.Any() ? pedidos.Max(p => p.Id) + 1 : 1; // mismo cálculo que antes vivía en el controlador
         if (nuevoPedido.Fecha == default) nuevoPedido.Fecha = DateTime.Now;
-        pedidos.Add(nuevoPedido);
-        await _storage.GuardarPedidosAsync(pedidos);
+        pedidos.Add(nuevoPedido); // agrega el nuevo pedido a la lista en memoria...
+        await _storage.GuardarPedidosAsync(pedidos); // ...y guarda la lista COMPLETA de vuelta en el almacenamiento
         return nuevoPedido;
     }
 
@@ -390,7 +406,7 @@ public class PedidoService : IPedidoService
         if (index == -1) return false;
         pedidoActualizado.Id = id;
         pedidos[index] = pedidoActualizado;
-        await _storage.GuardarPedidosAsync(pedidos);
+        await _storage.GuardarPedidosAsync(pedidos); // vuelve a guardar toda la lista, con ese pedido ya reemplazado
         return true;
     }
 
@@ -400,11 +416,18 @@ public class PedidoService : IPedidoService
         var pedido = pedidos.FirstOrDefault(p => p.Id == id);
         if (pedido == null) return false;
         pedidos.Remove(pedido);
-        await _storage.GuardarPedidosAsync(pedidos);
+        await _storage.GuardarPedidosAsync(pedidos); // guarda la lista sin ese pedido
         return true;
     }
 }
 ```
+
+:::note[💡 Por qué "leer todo, modificar en memoria, guardar todo"]
+Con un archivo no hay forma de "actualizar solo una fila" como en una base de datos — el
+archivo se lee y se escribe completo cada vez. Es ineficiente para archivos grandes, pero
+perfecto para aprender el patrón; en la [Parte 5](/guia/parte-5-sqlite/) vas a ver la
+alternativa real (tocar solo la fila que cambia) al pasar a SQLite.
+:::
 
 Reescribe el controlador para que dependa de `IPedidoService` en vez de tocar la lista
 directamente — nota que la *forma* de cada endpoint no cambia, solo de dónde saca los datos:
@@ -420,9 +443,9 @@ namespace Backend.Api.Controllers;
 [Route("api/[controller]")]
 public class PedidosController : ControllerBase
 {
-    private readonly IPedidoService _pedidoService;
+    private readonly IPedidoService _pedidoService; // ahora depende de la interfaz, no de una lista propia
 
-    public PedidosController(IPedidoService pedidoService)
+    public PedidosController(IPedidoService pedidoService) // inyectado por el contenedor de dependencias
     {
         _pedidoService = pedidoService;
     }
@@ -441,7 +464,7 @@ public class PedidosController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Post([FromBody] Pedido pedido)
     {
-        var creado = await _pedidoService.CrearAsync(pedido);
+        var creado = await _pedidoService.CrearAsync(pedido); // toda la lógica de asignar id ahora vive en el servicio
         return CreatedAtAction(nameof(GetPorId), new { id = creado.Id }, creado);
     }
 
@@ -472,19 +495,21 @@ using Backend.Api.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
+// registra qué CLASE CONCRETA entregar cuando alguien pida IPedidoStorageStrategy / IPedidoService por constructor
 builder.Services.AddScoped<IPedidoStorageStrategy, JsonPedidoStorageStrategy>();
 builder.Services.AddScoped<IPedidoService, PedidoService>();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowVue", policy =>
+    options.AddPolicy("AllowVue", policy => // "AllowVue" es solo el nombre que le damos a esta política, para referenciarla después
     {
+        // en desarrollo, permite cualquier origen/método/header; en producción restringirías esto (ver 1.8)
         policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
     });
 });
 
 var app = builder.Build();
-app.UseCors("AllowVue");
+app.UseCors("AllowVue"); // activa la política CORS de arriba; debe ir ANTES de MapControllers
 app.MapControllers();
 app.Run("http://0.0.0.0:5000");
 ```

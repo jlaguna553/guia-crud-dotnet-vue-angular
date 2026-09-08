@@ -168,15 +168,16 @@ export interface Pedido {
 Luego, un servicio que aísla la llamada HTTP:
 
 ```ts title="src/services/pedidoService.ts"
-import axios from 'axios';
-import type { Pedido } from '../types/pedido';
+import axios from 'axios'; // cliente HTTP: hace las peticiones y parsea el JSON de respuesta por ti
+import type { Pedido } from '../types/pedido'; // "import type": se borra al compilar, solo existe para el chequeo de tipos
 
-const API_URL = 'http://localhost:5000/api/pedidos';
+const API_URL = 'http://localhost:5000/api/pedidos'; // la URL del backend de la Parte 1, en una sola constante
 
+// un objeto plano con métodos async — no una clase; alcanza porque este servicio no guarda estado propio
 export const pedidoService = {
   async obtenerTodos(): Promise<Pedido[]> {
-    const res = await axios.get<Pedido[]>(API_URL);
-    return res.data;
+    const res = await axios.get<Pedido[]>(API_URL); // <Pedido[]> le dice a TypeScript qué forma esperar en la respuesta
+    return res.data; // axios envuelve la respuesta en un objeto con más info (status, headers...); .data es el body
   },
 };
 ```
@@ -190,14 +191,14 @@ import { ref, onMounted } from 'vue';
 import type { Pedido } from './types/pedido';
 import { pedidoService } from './services/pedidoService';
 
-const pedidos = ref<Pedido[]>([]);
+const pedidos = ref<Pedido[]>([]); // arranca vacío; <Pedido[]> porque ref() no puede inferir el tipo de un array vacío
 
 const cargarPedidos = async () => {
-  pedidos.value = await pedidoService.obtenerTodos();
-  console.log('Pedidos recibidos del backend:', pedidos.value);
+  pedidos.value = await pedidoService.obtenerTodos(); // espera la respuesta del backend y reemplaza el array completo
+  console.log('Pedidos recibidos del backend:', pedidos.value); // para verificar en la consola que sí llegó algo
 };
 
-onMounted(cargarPedidos);
+onMounted(cargarPedidos); // onMounted: corre una sola vez, cuando el componente ya está en el DOM
 </script>
 
 <template>
@@ -206,6 +207,7 @@ onMounted(cargarPedidos);
       <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Sistema de Pedidos</h1>
 
       <div class="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
+        <!-- v-if / v-else: solo uno de los dos bloques se renderiza, según si hay pedidos -->
         <div v-if="pedidos.length === 0" class="p-6 text-center text-gray-500">
           No hay pedidos registrados.
         </div>
@@ -218,6 +220,7 @@ onMounted(cargarPedidos);
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 text-sm">
+            <!-- :key ayuda a Vue a identificar cada fila cuando la lista cambia (agregar/quitar/reordenar) -->
             <tr v-for="ped in pedidos" :key="ped.id!">
               <td class="py-3 px-4 font-mono">#{{ ped.id }}</td>
               <td class="py-3 px-4">{{ ped.cliente.nombre }}</td>
@@ -275,28 +278,36 @@ Y un primer componente de formulario, solo para crear (todavía sin modo edició
 import { ref } from 'vue';
 import type { Pedido } from '../types/pedido';
 
+// defineEmits declara los eventos que este componente puede emitir hacia su padre;
+// el padre los escucha con @guardar="..." — es la única forma en que un hijo "habla hacia arriba"
 const emit = defineEmits<{
   (e: 'guardar', pedido: Pedido): void;
 }>();
 
+// estado local del formulario, con valores por defecto razonables (fecha de hoy, total en 0)
 const formulario = ref<Pedido>({
-  fecha: new Date().toISOString().slice(0, 16),
+  fecha: new Date().toISOString().slice(0, 16), // recorta el ISO string al formato que espera <input type="datetime-local">
   total: 0,
   cliente: { nombre: '', email: '' },
 });
 
 const submit = () => {
+  // "{ ...formulario.value }": copia superficial — evita que el padre reciba una referencia
+  // que este componente pueda seguir mutando después de emitir el evento
   emit('guardar', { ...formulario.value });
 };
 </script>
 
 <template>
+  <!-- @submit.prevent: evita que el navegador recargue la página al enviar el form (comportamiento HTML por defecto) -->
   <form @submit.prevent="submit" class="bg-white shadow-md rounded-lg p-6 mb-6 border border-gray-200">
     <h2 class="text-xl font-bold text-gray-800 mb-4">Registrar Nuevo Pedido</h2>
     <div class="grid grid-cols-2 gap-4 mb-4">
+      <!-- v-model enlaza el input directamente a un campo del objeto anidado formulario.cliente -->
       <input v-model="formulario.cliente.nombre" placeholder="Nombre del cliente" required class="border rounded px-3 py-2" />
       <input v-model="formulario.cliente.email" type="email" placeholder="Email" required class="border rounded px-3 py-2" />
       <input v-model="formulario.fecha" type="datetime-local" required class="border rounded px-3 py-2" />
+      <!-- v-model.number: convierte el texto del input a number automáticamente (si no, sería el string "150.5") -->
       <input v-model.number="formulario.total" type="number" step="0.01" required class="border rounded px-3 py-2" />
     </div>
     <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded font-medium">Guardar Pedido</button>
@@ -308,15 +319,15 @@ Conecta el formulario en `App.vue`: impórtalo, agrégalo en el `<template>` ant
 maneja el evento `guardar`:
 
 ```vue title="src/App.vue (cambios)"
-import PedidoForm from './components/PedidoForm.vue';
+import PedidoForm from './components/PedidoForm.vue'; // el nombre del archivo (PedidoForm.vue) define el tag <PedidoForm>
 // ...
 const guardarPedido = async (pedidoData: Pedido) => {
-  await pedidoService.crear(pedidoData);
-  await cargarPedidos();
+  await pedidoService.crear(pedidoData); // le pide al backend crear el pedido...
+  await cargarPedidos(); // ...y vuelve a pedir la lista completa, para que la tabla muestre el nuevo pedido con su id real
 };
 // ...
 // dentro del <template>, antes de la tabla:
-// <PedidoForm @guardar="guardarPedido" />
+// <PedidoForm @guardar="guardarPedido" /> -- "@guardar" escucha el evento que PedidoForm emite en su submit()
 ```
 
 <Resultado
@@ -346,10 +357,10 @@ Agrega `actualizar` y `eliminar` al servicio:
 
 ```ts title="src/services/pedidoService.ts (agregar)"
 async actualizar(id: number, pedido: Pedido): Promise<void> {
-  await axios.put(`${API_URL}/${id}`, pedido);
+  await axios.put(`${API_URL}/${id}`, pedido); // PUT no devuelve nada útil (el backend responde 204 No Content)
 },
 async eliminar(id: number): Promise<void> {
-  await axios.delete(`${API_URL}/${id}`);
+  await axios.delete(`${API_URL}/${id}`); // el id va en la URL, no en el body
 },
 ```
 
@@ -362,12 +373,15 @@ recibe un **prop** opcional `pedidoAEditar`; si viene con datos, precarga el for
 import { ref, watch } from 'vue';
 import type { Pedido } from '../types/pedido';
 
+// defineProps declara qué datos puede recibir este componente de su padre;
+// "?" y "| null" porque en modo "crear" el padre no tiene ningún pedido que pasarle
 const props = defineProps<{ pedidoAEditar?: Pedido | null }>();
 const emit = defineEmits<{
   (e: 'guardar', pedido: Pedido): void;
   (e: 'cancelar'): void;
 }>();
 
+// función (no una constante) para poder generar un formulario "vacío" nuevo cada vez que se necesite
 const vacio = (): Pedido => ({
   fecha: new Date().toISOString().slice(0, 16),
   total: 0,
@@ -381,23 +395,26 @@ const submit = () => {
 };
 
 const cancelar = () => {
-  formulario.value = vacio();
-  emit('cancelar');
+  formulario.value = vacio(); // limpia el formulario también al cancelar, no solo al guardar
+  emit('cancelar'); // avisa al padre para que también limpie pedidoSeleccionado
 };
 
-// se ejecuta cada vez que el padre cambia pedidoAEditar (click en "Editar")
+// watch observa "() => props.pedidoAEditar" (una función, no el valor directo) y corre el callback cuando cambia
 watch(
   () => props.pedidoAEditar,
   (nuevoVal) => {
+    // si el padre mandó un pedido: copia sus datos al formulario (modo edición)
+    // si mandó null: resetea el formulario (modo crear)
     formulario.value = nuevoVal ? { ...nuevoVal, cliente: { ...nuevoVal.cliente } } : vacio();
   },
-  { immediate: true },
+  { immediate: true }, // corre también una vez al crear el componente, no solo en cambios futuros
 );
 </script>
 
 <template>
   <form @submit.prevent="submit" class="bg-white shadow-md rounded-lg p-6 mb-6 border border-gray-200">
     <h2 class="text-xl font-bold text-gray-800 mb-4">
+      <!-- el título cambia solo con leer si formulario.id tiene valor -->
       {{ formulario.id ? '✏️ Editar Pedido' : '➕ Registrar Nuevo Pedido' }}
     </h2>
     <div class="grid grid-cols-2 gap-4 mb-4">
@@ -410,6 +427,7 @@ watch(
       <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded font-medium">
         {{ formulario.id ? 'Actualizar Pedido' : 'Guardar Pedido' }}
       </button>
+      <!-- el botón Cancelar solo existe en el DOM cuando hay un pedido seleccionado -->
       <button v-if="formulario.id" type="button" @click="cancelar" class="bg-gray-500 text-white px-4 py-2 rounded font-medium">
         Cancelar
       </button>
@@ -434,24 +452,25 @@ import { pedidoService } from './services/pedidoService';
 import PedidoForm from './components/PedidoForm.vue';
 
 const pedidos = ref<Pedido[]>([]);
-const pedidoSeleccionado = ref<Pedido | null>(null);
+const pedidoSeleccionado = ref<Pedido | null>(null); // null = modo crear; con un pedido = modo editar
 
 const cargarPedidos = async () => {
   pedidos.value = await pedidoService.obtenerTodos();
 };
 
 const guardarPedido = async (pedidoData: Pedido) => {
+  // la MISMA decisión que ya viste en el backend (Parte 1): si trae id, es un update; si no, es un create
   if (pedidoData.id) {
     await pedidoService.actualizar(pedidoData.id, pedidoData);
   } else {
     await pedidoService.crear(pedidoData);
   }
-  pedidoSeleccionado.value = null;
-  await cargarPedidos();
+  pedidoSeleccionado.value = null; // vuelve a modo "crear" después de guardar
+  await cargarPedidos(); // refresca la tabla con el estado real del backend
 };
 
 const borrarPedido = async (id: number) => {
-  if (confirm(`¿Eliminar el pedido #${id}?`)) {
+  if (confirm(`¿Eliminar el pedido #${id}?`)) { // confirm() nativo del navegador: bloquea hasta que el usuario responde
     await pedidoService.eliminar(id);
     await cargarPedidos();
   }
@@ -465,6 +484,7 @@ onMounted(cargarPedidos);
     <div class="max-w-3xl mx-auto">
       <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Sistema de Pedidos</h1>
 
+      <!-- ":pedidoAEditar" (con :) enlaza un dato; "@guardar"/"@cancelar" (con @) escuchan eventos -->
       <PedidoForm
         :pedidoAEditar="pedidoSeleccionado"
         @guardar="guardarPedido"
@@ -490,6 +510,7 @@ onMounted(cargarPedidos);
               <td class="py-3 px-4">{{ ped.cliente.nombre }}</td>
               <td class="py-3 px-4">{{ ped.total }}</td>
               <td class="py-3 px-4 text-center space-x-2">
+                <!-- click en Editar: solo cambia el estado del padre; PedidoForm reacciona vía su "watch" -->
                 <button @click="pedidoSeleccionado = ped" class="bg-amber-500 text-white px-3 py-1 rounded text-xs">Editar</button>
                 <button @click="borrarPedido(ped.id!)" class="bg-red-600 text-white px-3 py-1 rounded text-xs">Eliminar</button>
               </td>
@@ -550,12 +571,14 @@ sin lógica nueva de CRUD — solo presentación. Reemplaza la tabla completa po
   <tbody class="divide-y divide-gray-200 text-sm">
     <tr v-for="ped in pedidos" :key="ped.id!">
       <td class="py-3 px-4 font-mono">#{{ ped.id }}</td>
+      <!-- toLocaleString con dateStyle/timeStyle: convierte el ISO string en algo legible, en español -->
       <td class="py-3 px-4">{{ new Date(ped.fecha).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) }}</td>
       <td class="py-3 px-4">
         <div class="font-semibold">{{ ped.cliente.nombre }}</div>
         <div class="text-xs text-gray-500">{{ ped.cliente.email }}</div>
       </td>
       <td class="py-3 px-4 text-emerald-600 font-bold">
+        <!-- Intl.NumberFormat con style:"currency": agrega el símbolo $ y separadores de miles automáticamente -->
         {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(ped.total) }}
       </td>
       <td class="py-3 px-4 text-center space-x-2">

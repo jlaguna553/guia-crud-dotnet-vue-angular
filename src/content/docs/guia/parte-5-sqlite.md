@@ -68,12 +68,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Api.Data;
 
+// Un DbContext representa una "sesión" contra la base de datos: agrupa
+// las tablas (DbSets) que existen y sabe cómo conectarse a la base real.
 public class PedidoDbContext : DbContext
 {
+    // pasa la configuración (cadena de conexión, proveedor) recibida por inyección de dependencias a la clase base
     public PedidoDbContext(DbContextOptions<PedidoDbContext> options) : base(options) { }
 
+    // DbSet<Pedido> representa la tabla "Pedidos"; Set<Pedido>() la obtiene desde el DbContext base
     public DbSet<Pedido> Pedidos => Set<Pedido>();
 
+    // OnModelCreating: aquí le decimos a EF Core CÓMO mapear las clases C# a tablas/columnas
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Cliente no tiene tabla propia: EF Core lo guarda como columnas
@@ -117,38 +122,43 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Api.Services;
 
+// Implementa el MISMO contrato que PedidoService (Parte 1), pero cada
+// operación toca solo la fila que necesita, no la lista completa.
 public class PedidoSqliteService : IPedidoService
 {
-    private readonly PedidoDbContext _db;
+    private readonly PedidoDbContext _db; // inyectado por el contenedor de dependencias (ver Program.cs)
 
     public PedidoSqliteService(PedidoDbContext db) { _db = db; }
 
+    // AsNoTracking(): solo estamos leyendo, no hace falta que EF Core vigile cambios -> más rápido
     public async Task<List<Pedido>> ObtenerTodosAsync() =>
-        await _db.Pedidos.AsNoTracking().ToListAsync();
+        await _db.Pedidos.AsNoTracking().ToListAsync(); // trae solo las filas que coinciden, no toda la tabla en memoria antes
 
     public async Task<Pedido?> ObtenerPorIdAsync(int id) =>
-        await _db.Pedidos.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id);
+        await _db.Pedidos.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id); // EF Core traduce esto a un SELECT ... WHERE Id = @id
 
     public async Task<Pedido> CrearAsync(Pedido nuevoPedido)
     {
         if (nuevoPedido.Fecha == default) nuevoPedido.Fecha = DateTime.Now;
-        nuevoPedido.Id = null; // el Id lo asigna SQLite (autoincremental)
-        _db.Pedidos.Add(nuevoPedido);
-        await _db.SaveChangesAsync();
+        nuevoPedido.Id = null; // el Id lo asigna SQLite (AUTOINCREMENT), no nosotros
+        _db.Pedidos.Add(nuevoPedido); // marca la entidad como "nueva" (todavía no toca la base de datos)
+        await _db.SaveChangesAsync(); // aquí sí se ejecuta el INSERT real; nuevoPedido.Id queda relleno después de esto
         return nuevoPedido;
     }
 
     public async Task<bool> ActualizarAsync(int id, Pedido pedidoActualizado)
     {
+        // sin AsNoTracking: necesitamos que EF Core "vigile" esta entidad para detectar qué cambió
         var existente = await _db.Pedidos.FirstOrDefaultAsync(p => p.Id == id);
         if (existente == null) return false;
 
+        // modifica los campos uno por uno sobre la entidad rastreada (no reemplaza el objeto completo)
         existente.Fecha = pedidoActualizado.Fecha;
         existente.Total = pedidoActualizado.Total;
         existente.Cliente.Nombre = pedidoActualizado.Cliente.Nombre;
         existente.Cliente.Email = pedidoActualizado.Cliente.Email;
 
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(); // EF Core genera un UPDATE con solo las columnas que realmente cambiaron
         return true;
     }
 
@@ -157,8 +167,8 @@ public class PedidoSqliteService : IPedidoService
         var existente = await _db.Pedidos.FirstOrDefaultAsync(p => p.Id == id);
         if (existente == null) return false;
 
-        _db.Pedidos.Remove(existente);
-        await _db.SaveChangesAsync();
+        _db.Pedidos.Remove(existente); // marca la entidad para borrar (todavía no toca la base de datos)
+        await _db.SaveChangesAsync(); // aquí se ejecuta el DELETE real
         return true;
     }
 }
@@ -186,18 +196,20 @@ Opción 1 y descomenta la Opción 3:
 
 // Opción 3: base de datos SQLite
 builder.Services.AddDbContext<PedidoDbContext>(options =>
-    options.UseSqlite("Data Source=Data/pedidos.db"));
-builder.Services.AddScoped<IPedidoService, PedidoSqliteService>();
+    options.UseSqlite("Data Source=Data/pedidos.db")); // registra el DbContext, apuntando al archivo .db
+builder.Services.AddScoped<IPedidoService, PedidoSqliteService>(); // IPedidoService ahora resuelve a la versión SQLite
 ```
 
 Y justo después de construir la app, este bloque crea el archivo `pedidos.db` y su tabla la
 primera vez que arranca:
 
 ```csharp title="Program.cs"
+// crea un "scope" temporal para poder pedir un PedidoDbContext manualmente
+// (fuera de una petición HTTP, que es lo normal cuando se inyectan servicios)
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetService<PedidoDbContext>();
-    db?.Database.EnsureCreated();
+    var db = scope.ServiceProvider.GetService<PedidoDbContext>(); // null si no está registrado (modo JSON activo)
+    db?.Database.EnsureCreated(); // "?.": solo llama a EnsureCreated si db no es null
 }
 ```
 

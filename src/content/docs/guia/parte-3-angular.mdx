@@ -164,9 +164,11 @@ Con el backend de la [Parte 1](/guia/parte-1-backend/) corriendo, primero habili
 
 ```ts title="src/app/app.config.ts"
 import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient } from '@angular/common/http'; // habilita el servicio HttpClient en toda la app
 
 export const appConfig: ApplicationConfig = {
+  // "providers": la lista de servicios disponibles para inyección de dependencias en toda la app;
+  // sin provideHttpClient() aquí, inyectar HttpClient en cualquier servicio fallaría en tiempo de ejecución
   providers: [provideZoneChangeDetection({ eventCoalescing: true }), provideHttpClient()]
 };
 ```
@@ -200,16 +202,19 @@ El servicio:
 ```ts title="src/app/services/pedido.service.ts"
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom } from 'rxjs'; // convierte un Observable en una Promesa (ver el aside de arriba)
 import type { Pedido } from '../models/pedido';
 
 const API_URL = 'http://localhost:5000/api/pedidos';
 
-@Injectable({ providedIn: 'root' })
+@Injectable({ providedIn: 'root' }) // "providedIn: 'root'": una única instancia compartida por toda la app
 export class PedidoService {
+  // "private http: HttpClient" en el constructor es a la vez el parámetro Y la propiedad de la clase
+  // (azúcar sintáctico de TypeScript); Angular inyecta automáticamente la instancia de HttpClient aquí
   constructor(private http: HttpClient) {}
 
   obtenerTodos(): Promise<Pedido[]> {
+    // this.http.get<Pedido[]>(...) devuelve un Observable; firstValueFrom espera su primer valor y lo entrega como Promise
     return firstValueFrom(this.http.get<Pedido[]>(API_URL));
   }
 }
@@ -218,7 +223,7 @@ export class PedidoService {
 Y en el componente, reemplaza el array fijo:
 
 ```ts title="src/app/app.component.ts"
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core'; // OnInit: interfaz que exige implementar ngOnInit()
 import { CommonModule } from '@angular/common';
 import { PedidoService } from './services/pedido.service';
 import type { Pedido } from './models/pedido';
@@ -229,11 +234,13 @@ import type { Pedido } from './models/pedido';
   imports: [CommonModule],
   templateUrl: './app.component.html',
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit { // "implements OnInit": promesa al compilador de que existe ngOnInit()
   pedidos: Pedido[] = [];
 
-  constructor(private pedidoService: PedidoService) {}
+  constructor(private pedidoService: PedidoService) {} // Angular inyecta la única instancia compartida del servicio
 
+  // ngOnInit: hook de ciclo de vida que Angular llama una vez, cuando el componente ya está listo
+  // (equivalente a onMounted en Vue) — mejor lugar para disparar la carga inicial de datos
   async ngOnInit() {
     this.pedidos = await this.pedidoService.obtenerTodos();
     console.log('Pedidos recibidos del backend:', this.pedidos);
@@ -280,16 +287,16 @@ Imagina un componente hijo que saluda a alguien, y avisa a su padre cada vez que
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
-  selector: 'app-saludo',
+  selector: 'app-saludo', // el tag que usarás en el HTML del padre: <app-saludo>
   standalone: true,
   templateUrl: './saludo.component.html',
 })
 export class SaludoComponent {
-  @Input() nombre = '';
-  @Output() saludado = new EventEmitter<string>();
+  @Input() nombre = ''; // el padre puede escribir este valor desde afuera; '' es el valor por defecto
+  @Output() saludado = new EventEmitter<string>(); // canal de eventos que el padre puede escuchar
 
   saludar() {
-    this.saludado.emit(this.nombre);
+    this.saludado.emit(this.nombre); // dispara el evento "saludado", mandando el nombre como dato
   }
 }
 ```
@@ -303,17 +310,18 @@ Y lo usas desde el padre así:
 
 ```ts title="src/app/app.component.ts (solo para este experimento)"
 import { Component } from '@angular/core';
-import { SaludoComponent } from './saludo/saludo.component';
+import { SaludoComponent } from './saludo/saludo.component'; // hay que importar el componente hijo para poder usarlo
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [SaludoComponent],
+  imports: [SaludoComponent], // declara qué componentes hijos puede usar la plantilla de este componente
   templateUrl: './app.component.html',
 })
 export class AppComponent {
   ultimoSaludo = '';
 
+  // este método lo llama el HIJO (vía el evento "saludado"), no un click directo en este componente
   registrarSaludo(nombre: string) {
     this.ultimoSaludo = nombre;
     console.log('El hijo avisó que saludó a:', nombre);
@@ -322,6 +330,7 @@ export class AppComponent {
 ```
 
 ```html title="src/app/app.component.html (solo para este experimento)"
+<!-- "nombre=" pasa un valor fijo (@Input); "(saludado)=" escucha el evento (@Output), $event trae lo que se emitió -->
 <app-saludo nombre="Ana" (saludado)="registrarSaludo($event)"></app-saludo>
 <p>Último saludo recibido en el padre: {{ ultimoSaludo }}</p>
 ```
@@ -353,7 +362,7 @@ avisa al padre con `@Output() guardar`.
 ```ts title="src/app/components/pedido-form/pedido-form.component.ts"
 import { Component, EventEmitter, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormsModule } from '@angular/forms'; // trae ngModel, necesario para [(ngModel)] en la plantilla
 import type { Pedido } from '../../models/pedido';
 
 @Component({
@@ -363,8 +372,9 @@ import type { Pedido } from '../../models/pedido';
   templateUrl: './pedido-form.component.html',
 })
 export class PedidoFormComponent {
-  @Output() guardar = new EventEmitter<Pedido>();
+  @Output() guardar = new EventEmitter<Pedido>(); // este componente no sabe nada de HTTP: solo avisa "aquí hay un pedido"
 
+  // estado inicial del formulario — igual que en Vue, con valores por defecto razonables
   formulario: Pedido = {
     fecha: new Date().toISOString().slice(0, 16),
     total: 0,
@@ -372,15 +382,17 @@ export class PedidoFormComponent {
   };
 
   submit() {
-    this.guardar.emit({ ...this.formulario });
+    this.guardar.emit({ ...this.formulario }); // copia superficial, para no compartir la misma referencia con el padre
   }
 }
 ```
 
 ```html title="src/app/components/pedido-form/pedido-form.component.html"
+<!-- (ngSubmit) reemplaza el envío normal del form; evita el recargo de página que haría el navegador por defecto -->
 <form (ngSubmit)="submit()" class="bg-white shadow-md rounded-lg p-6 mb-6 border border-gray-200">
   <h2 class="text-xl font-bold text-gray-800 mb-4">Registrar Nuevo Pedido</h2>
   <div class="grid grid-cols-2 gap-4 mb-4">
+    <!-- [(ngModel)] es two-way binding: lee Y escribe formulario.cliente.nombre; "name" es obligatorio (ver nota abajo) -->
     <input [(ngModel)]="formulario.cliente.nombre" name="nombre" placeholder="Nombre del cliente" required class="border rounded px-3 py-2" />
     <input [(ngModel)]="formulario.cliente.email" name="email" type="email" placeholder="Email" required class="border rounded px-3 py-2" />
     <input [(ngModel)]="formulario.fecha" name="fecha" type="datetime-local" required class="border rounded px-3 py-2" />
@@ -414,7 +426,7 @@ import type { Pedido } from './models/pedido';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, PedidoFormComponent],
+  imports: [CommonModule, PedidoFormComponent], // ahora AppComponent puede usar <app-pedido-form> en su plantilla
   templateUrl: './app.component.html',
 })
 export class AppComponent implements OnInit {
@@ -430,14 +442,16 @@ export class AppComponent implements OnInit {
     this.pedidos = await this.pedidoService.obtenerTodos();
   }
 
+  // recibe el pedido que PedidoFormComponent emitió por su @Output "guardar"
   async guardarPedido(pedido: Pedido) {
     await this.pedidoService.crear(pedido);
-    await this.cargarPedidos();
+    await this.cargarPedidos(); // refresca la tabla para reflejar el pedido recién creado
   }
 }
 ```
 
 ```html title="src/app/app.component.html (agrega app-pedido-form arriba de la tabla)"
+<!-- "(guardar)=" escucha el @Output del hijo; $event trae el Pedido que el hijo emitió -->
 <app-pedido-form (guardar)="guardarPedido($event)"></app-pedido-form>
 ```
 
@@ -470,7 +484,7 @@ hijo — y el hijo necesita *enterarse* de ese cambio para actualizar su propio 
 Otra vez, primero el mecanismo aislado:
 
 ```ts title="src/app/contador-hijo/contador-hijo.component.ts — EJEMPLO DE JUGUETE"
-import { Component, Input, OnChanges } from '@angular/core';
+import { Component, Input, OnChanges } from '@angular/core'; // OnChanges: interfaz que exige implementar ngOnChanges()
 
 @Component({
   selector: 'app-contador-hijo',
@@ -480,6 +494,7 @@ import { Component, Input, OnChanges } from '@angular/core';
 export class ContadorHijoComponent implements OnChanges {
   @Input() valorPadre = 0;
 
+  // Angular llama este método automáticamente cada vez que valorPadre cambia de valor
   ngOnChanges() {
     console.log('El padre cambió valorPadre a:', this.valorPadre);
   }
@@ -491,6 +506,7 @@ export class ContadorHijoComponent implements OnChanges {
 ```
 
 ```html title="app.component.html (solo para este experimento)"
+<!-- cada click reasigna "valor" en el padre -> Angular detecta el cambio -> se lo pasa al hijo por [valorPadre] -->
 <button (click)="valor = valor + 1">Incrementar</button>
 <app-contador-hijo [valorPadre]="valor"></app-contador-hijo>
 ```
@@ -522,6 +538,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type { Pedido } from '../../models/pedido';
 
+// función (no un valor fijo) para poder generar un formulario "vacío" nuevo cada vez que se necesite
 const vacio = (): Pedido => ({
   fecha: new Date().toISOString().slice(0, 16),
   total: 0,
@@ -535,16 +552,17 @@ const vacio = (): Pedido => ({
   templateUrl: './pedido-form.component.html',
 })
 export class PedidoFormComponent implements OnChanges {
-  @Input() pedidoAEditar: Pedido | null = null;
+  @Input() pedidoAEditar: Pedido | null = null; // null = modo crear; con datos = modo editar
   @Output() guardar = new EventEmitter<Pedido>();
-  @Output() cancelar = new EventEmitter<void>();
+  @Output() cancelar = new EventEmitter<void>(); // <void>: este evento no manda ningún dato, solo avisa "cancelé"
 
   formulario: Pedido = vacio();
 
+  // se dispara cada vez que pedidoAEditar cambia (incluida la primera vez que llega un valor)
   ngOnChanges() {
     this.formulario = this.pedidoAEditar
-      ? { ...this.pedidoAEditar, cliente: { ...this.pedidoAEditar.cliente } }
-      : vacio();
+      ? { ...this.pedidoAEditar, cliente: { ...this.pedidoAEditar.cliente } } // copia los datos del pedido a editar
+      : vacio(); // o resetea, si el padre volvió a poner null
   }
 
   submit() {
@@ -552,7 +570,7 @@ export class PedidoFormComponent implements OnChanges {
   }
 
   onCancelar() {
-    this.formulario = vacio();
+    this.formulario = vacio(); // limpia también el propio estado interno, no solo avisa al padre
     this.cancelar.emit();
   }
 }
@@ -573,6 +591,7 @@ export class PedidoFormComponent implements OnChanges {
     <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded font-medium">
       {{ formulario.id ? 'Actualizar Pedido' : 'Guardar Pedido' }}
     </button>
+    <!-- *ngIf quita el botón del DOM por completo (no solo lo oculta) cuando no hay pedido seleccionado -->
     <button *ngIf="formulario.id" type="button" (click)="onCancelar()" class="bg-gray-500 text-white px-4 py-2 rounded font-medium">
       Cancelar
     </button>
@@ -595,10 +614,11 @@ import type { Pedido } from '../../models/pedido';
   templateUrl: './pedido-tabla.component.html',
 })
 export class PedidoTablaComponent {
-  @Input() pedidos: Pedido[] = [];
-  @Output() editar = new EventEmitter<Pedido>();
-  @Output() eliminar = new EventEmitter<number>();
+  @Input() pedidos: Pedido[] = []; // este componente no llama al backend: solo recibe y muestra lo que le pasan
+  @Output() editar = new EventEmitter<Pedido>(); // avisa CUÁL pedido, no solo que "algo pasó"
+  @Output() eliminar = new EventEmitter<number>(); // para eliminar basta con el id
 
+  // funciones de formateo puro: reciben un valor, devuelven un string — sin tocar el estado del componente
   formatearMoneda(val: number) {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
   }
@@ -633,6 +653,7 @@ export class PedidoTablaComponent {
         </td>
         <td class="py-3 px-4 text-emerald-600 font-bold">{{ formatearMoneda(ped.total) }}</td>
         <td class="py-3 px-4 text-center space-x-2">
+          <!-- emite el PEDIDO completo (no solo el id): AppComponent lo necesita para precargar el formulario -->
           <button (click)="editar.emit(ped)" class="bg-amber-500 text-white px-3 py-1 rounded text-xs">Editar</button>
           <button (click)="eliminar.emit(ped.id!)" class="bg-red-600 text-white px-3 py-1 rounded text-xs">Eliminar</button>
         </td>
@@ -666,12 +687,12 @@ import type { Pedido } from './models/pedido';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [PedidoFormComponent, PedidoTablaComponent],
+  imports: [PedidoFormComponent, PedidoTablaComponent], // ya no importa CommonModule: no queda *ngIf/*ngFor en ESTE archivo
   templateUrl: './app.component.html',
 })
 export class AppComponent implements OnInit {
-  pedidos: Pedido[] = [];
-  pedidoSeleccionado: Pedido | null = null;
+  pedidos: Pedido[] = []; // el estado "fuente de verdad", que baja a ambos hijos por @Input
+  pedidoSeleccionado: Pedido | null = null; // null = modo crear; con datos = modo editar
 
   constructor(private pedidoService: PedidoService) {}
 
@@ -683,16 +704,19 @@ export class AppComponent implements OnInit {
     this.pedidos = await this.pedidoService.obtenerTodos();
   }
 
+  // recibe el pedido emitido por (guardar) desde PedidoFormComponent
   async guardarPedido(pedido: Pedido) {
+    // misma decisión que en el backend (Parte 1) y en Vue: con id -> actualizar, sin id -> crear
     if (pedido.id) {
       await this.pedidoService.actualizar(pedido.id, pedido);
     } else {
       await this.pedidoService.crear(pedido);
     }
-    this.pedidoSeleccionado = null;
+    this.pedidoSeleccionado = null; // vuelve a modo crear
     await this.cargarPedidos();
   }
 
+  // recibe el id emitido por (eliminar) desde PedidoTablaComponent
   async borrarPedido(id: number) {
     if (confirm(`¿Eliminar el pedido #${id}?`)) {
       await this.pedidoService.eliminar(id);
@@ -707,12 +731,14 @@ export class AppComponent implements OnInit {
   <div class="max-w-3xl mx-auto">
     <h1 class="text-3xl font-extrabold text-gray-900 mb-6">Sistema de Pedidos</h1>
 
+    <!-- [pedidoAEditar]: dato hacia abajo. (guardar)/(cancelar): eventos hacia arriba -->
     <app-pedido-form
       [pedidoAEditar]="pedidoSeleccionado"
       (guardar)="guardarPedido($event)"
       (cancelar)="pedidoSeleccionado = null">
     </app-pedido-form>
 
+    <!-- click en "Editar" dentro de la tabla -> este componente cambia pedidoSeleccionado -> el form reacciona solo -->
     <app-pedido-tabla
       [pedidos]="pedidos"
       (editar)="pedidoSeleccionado = $event"
@@ -772,16 +798,18 @@ import { Component, signal, computed } from '@angular/core';
   templateUrl: './contador-signal.component.html',
 })
 export class ContadorSignalComponent {
-  contador = signal(0);
-  doble = computed(() => this.contador() * 2);
+  contador = signal(0); // crea una signal con valor inicial 0 (no es un number normal, es un contenedor reactivo)
+  doble = computed(() => this.contador() * 2); // signal derivada: se recalcula sola cuando "contador" cambia
 
   incrementar() {
+    // .update() recibe el valor ACTUAL y devuelve el nuevo; nunca se reasigna "this.contador = ..." directamente
     this.contador.update((valorActual) => valorActual + 1);
   }
 }
 ```
 
 ```html title="src/app/contador-signal/contador-signal.component.html"
+<!-- "contador()" con paréntesis: así se LEE una signal en la plantilla, igual que en el .ts -->
 <p>Contador: {{ contador() }}</p>
 <p>Doble: {{ doble() }}</p>
 <button (click)="incrementar()">+1</button>
@@ -808,7 +836,7 @@ dentro.
 ### `input()` y `output()`: la versión signal de `@Input`/`@Output`
 
 ```ts title="src/app/saludo-signal/saludo-signal.component.ts — EJEMPLO DE JUGUETE"
-import { Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core'; // funciones en minúscula, no decoradores
 
 @Component({
   selector: 'app-saludo-signal',
@@ -816,11 +844,11 @@ import { Component, input, output } from '@angular/core';
   templateUrl: './saludo-signal.component.html',
 })
 export class SaludoSignalComponent {
-  nombre = input('');
-  saludado = output<string>();
+  nombre = input(''); // reemplaza @Input() nombre = ''; el valor entre paréntesis es el valor por defecto
+  saludado = output<string>(); // reemplaza @Output() saludado = new EventEmitter<string>()
 
   saludar() {
-    this.saludado.emit(this.nombre());
+    this.saludado.emit(this.nombre()); // "nombre()" para leerlo — output() se sigue usando con .emit() igual que antes
   }
 }
 ```
@@ -850,19 +878,23 @@ import { Component, signal } from '@angular/core';
   templateUrl: './lista-signal.component.html',
 })
 export class ListaSignalComponent {
-  items = signal<string[]>([]);
+  items = signal<string[]>([]); // signal que guarda un array; <string[]> porque empieza vacío y TypeScript no puede inferirlo
 
   agregar() {
+    // "[...actual, nuevo]" crea un array NUEVO con todo lo anterior más el elemento agregado;
+    // nunca se hace actual.push(...) directamente — las signals detectan el cambio comparando la referencia
     this.items.update((actual) => [...actual, `item ${actual.length + 1}`]);
   }
 }
 ```
 
 ```html title="src/app/lista-signal/lista-signal.component.html"
+<!-- @if/@else: reemplaza *ngIf/*ngElse, sin necesitar CommonModule -->
 @if (items().length === 0) {
   <p>No hay items todavía.</p>
 } @else {
   <ul>
+    <!-- @for exige "track": aquí, el propio string (cada item ya es único) -->
     @for (item of items(); track item) {
       <li>{{ item }}</li>
     }
@@ -908,14 +940,15 @@ import type { Pedido } from '../../models/pedido';
 @Component({
   selector: 'app-pedido-tabla',
   standalone: true,
-  imports: [],
+  imports: [], // ya no hace falta CommonModule: @if/@for son sintaxis del compilador, no directivas importables
   templateUrl: './pedido-tabla.component.html',
 })
 export class PedidoTablaComponent {
-  pedidos = input<Pedido[]>([]);
+  pedidos = input<Pedido[]>([]); // el padre lo sigue usando igual: [pedidos]="pedidos" no cambia
   editar = output<Pedido>();
   eliminar = output<number>();
 
+  // se recalcula sola cada vez que "pedidos" cambia -- sin este código, tendrías que sumar manualmente en cada render
   totalGeneral = computed(() =>
     this.pedidos().reduce((suma, ped) => suma + ped.total, 0)
   );
@@ -944,6 +977,7 @@ export class PedidoTablaComponent {
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200 text-sm">
+        <!-- track ped.id: aquí sí hace falta un campo del objeto, a diferencia del ejemplo de juguete con strings -->
         @for (ped of pedidos(); track ped.id) {
           <tr>
             <td class="py-3 px-4 font-mono">#{{ ped.id }}</td>
@@ -957,6 +991,7 @@ export class PedidoTablaComponent {
         }
       </tbody>
     </table>
+    <!-- totalGeneral() se recalcula solo; no hay ningún método que "actualice el total" a mano -->
     <div class="p-3 text-right text-sm font-semibold border-t border-gray-200">
       Total general: {{ formatearMoneda(totalGeneral()) }}
     </div>
